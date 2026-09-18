@@ -94,6 +94,19 @@ async function handle(msg) {
       if (branch) body.branch = branch;
       return ctxd("/v1/claims", { method: "POST", body });
     }
+    case "ctx:saveDoc": {
+      const s = await settings();
+      const body = { name: msg.name || "spec", body: msg.body, src: msg.src };
+      if (msg.title) body.title = msg.title;
+      const branch = msg.branch || s.branch;
+      if (branch) body.branch = branch;
+      return ctxd("/v1/docs", { method: "POST", body });
+    }
+    case "ctx:docs": {
+      const params = new URLSearchParams();
+      if (msg.branch) params.set("branch", msg.branch);
+      return ctxd(`/v1/docs?${params}`);
+    }
     default:
       throw new CtxError(`Unknown message type: ${msg && msg.type}`);
   }

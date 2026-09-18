@@ -2,7 +2,8 @@
 //
 // Two jobs, both deliberately narrow:
 //  1. Insert plain markdown into the chat composer when asked.
-//  2. Find ```ctx-claims code blocks and offer a "Save to ctx" button.
+//  2. Find ```ctx-claims code blocks and offer a "Save to ctx" button, and
+//     ````ctx-spec blocks (a full markdown spec) with a "Save spec to ctx" one.
 //
 // It never fetches localhost (page CSP blocks it; background.js does HTTP) and
 // never scrapes chat content: selectors only look at code blocks, which depend
@@ -87,18 +88,36 @@
     return (h >>> 0).toString(16);
   }
 
-  function labelledCtxClaims(codeEl) {
-    const cls = `${codeEl.className || ""} ${(codeEl.parentElement && codeEl.parentElement.className) || ""}`;
-    if (/(^|\s|-)ctx-claims(\s|$)/.test(cls)) return true;
+  /** True if the code block is fenced with language `tag` (class or label). */
+  function labelledAs(codeEl, tag) {
+    const cls = ` ${codeEl.className || ""} ${(codeEl.parentElement && codeEl.parentElement.className) || ""} `;
+    // Matches `ctx-spec`, `language-ctx-spec`, `lang-ctx-spec` as whole class tokens.
+    if (cls.split(/\s+/).some((c) => c === tag || c.endsWith(`-${tag}`))) return true;
     // Many UIs render the fence language as a label just above the <pre>.
     const pre = codeEl.closest("pre") || codeEl;
     for (let node = pre, depth = 0; node && depth < 3; node = node.parentElement, depth++) {
       const prev = node.previousElementSibling;
-      if (prev && prev.textContent && prev.textContent.trim().toLowerCase() === "ctx-claims") return true;
+      if (prev && prev.textContent && prev.textContent.trim().toLowerCase() === tag) return true;
       const first = node.parentElement && node.parentElement.firstElementChild;
-      if (first && first !== node && first.textContent && first.textContent.trim().toLowerCase().startsWith("ctx-claims")) return true;
+      if (first && first !== node && first.textContent && first.textContent.trim().toLowerCase().startsWith(tag)) return true;
     }
     return false;
+  }
+
+  /**
+   * A spec block: fenced as ctx-spec, or raw text that still carries the
+   * opening fence (UIs that don't render markdown). Specs are markdown, never
+   * parsed as claims.
+   */
+  function isSpecBlock(codeEl) {
+    if (labelledAs(codeEl, "ctx-spec")) return true;
+    return /^`{3,}[ \t]*ctx-spec\b/.test((codeEl.textContent || "").trimStart());
+  }
+
+  /** Strip a leftover ````ctx-spec fence if the UI didn't render it. */
+  function specBody(raw) {
+    const m = raw.trim().match(/^(`{3,})[ \t]*ctx-spec[^\n]*\n([\s\S]*?)\n?\1[ \t]*$/);
+    return (m ? m[2] : raw).trim();
   }
 
   /** Parse a block's text into claims, or null if it isn't a claims array. */
@@ -218,14 +237,67 @@
     pre.insertAdjacentElement("afterend", btn);
   }
 
+  function addSpecButton(codeEl) {
+    const pre = codeEl.closest("pre") || codeEl;
+    if (withButton.has(pre)) return;
+    withButton.add(pre);
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.dataset.ctxSave = "1";
+    btn.textContent = "Save spec to ctx";
+    styleButton(btn, "idle");
+    if (savedHashes.has(hash(codeEl.textContent || ""))) {
+      btn.textContent = "Spec already saved";
+      styleButton(btn, "ok");
+    }
+
+    btn.addEventListener("click", async (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      // Re-read at click time: the block may have finished streaming since.
+      const raw = codeEl.textContent || "";
+      const body = specBody(raw);
+      if (!body) {
+        btn.textContent = "The spec block is empty";
+        styleButton(btn, "err");
+        return;
+      }
+      btn.textContent = "Saving spec…";
+      styleButton(btn, "busy");
+      btn.disabled = true;
+      let res;
+      try {
+        res = await chrome.runtime.sendMessage({ type: "ctx:saveDoc", name: "spec", body, src: surface() });
+      } catch (e) {
+        res = { ok: false, error: "Extension was reloaded; refresh this page." };
+      }
+      btn.disabled = false;
+      if (!res || !res.ok) {
+        btn.textContent = `ctx: ${(res && res.error) || "unknown error"}`;
+        styleButton(btn, "err");
+        return;
+      }
+      const d = res.data || {};
+      btn.textContent = d.duplicate ? "Spec unchanged (already saved)" : `Spec saved to ${d.branch || "ctx"}`;
+      btn.title = d.title || "";
+      styleButton(btn, "ok");
+      savedHashes.add(hash(raw));
+    });
+
+    pre.insertAdjacentElement("afterend", btn);
+  }
+
   function scan() {
     for (const codeEl of document.querySelectorAll("pre code, pre")) {
       if (codeEl.tagName === "PRE" && codeEl.querySelector("code")) continue; // handled via its <code>
       const pre = codeEl.closest("pre") || codeEl;
       if (withButton.has(pre)) continue;
       const text = codeEl.textContent || "";
-      if (text.length > 200000) continue;
-      if (parseClaims(text) || (labelledCtxClaims(codeEl) && text.trim().startsWith("["))) {
+      if (text.length > 500000) continue;
+      if (isSpecBlock(codeEl)) {
+        addSpecButton(codeEl);
+      } else if (text.length <= 200000 && (parseClaims(text) || (labelledAs(codeEl, "ctx-claims") && text.trim().startsWith("[")))) {
         addButton(codeEl);
       }
     }

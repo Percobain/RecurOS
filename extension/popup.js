@@ -39,7 +39,24 @@ async function loadBranches() {
   } catch (e) {
     status(e.message, "err");
   }
+  loadDocs();
 }
+
+/** Show the branch's documents (e.g. its spec). Optional: failures are silent. */
+async function loadDocs() {
+  const el = $("docs");
+  el.textContent = "";
+  try {
+    const branch = $("branch").value;
+    const data = await send({ type: "ctx:docs", branch });
+    const docs = (data && data.docs) || [];
+    el.textContent = docs.map((d) => `${d.name}: ${d.title}`).join(" · ");
+  } catch (_) {
+    // Older ctxd without /v1/docs, or no connection: the status line covers it.
+  }
+}
+
+$("branch").addEventListener("change", loadDocs);
 
 $("insert").addEventListener("click", async () => {
   status("Compiling pack…");
