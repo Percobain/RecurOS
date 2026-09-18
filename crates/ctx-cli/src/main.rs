@@ -3,6 +3,7 @@
 mod clipboard;
 mod doctor;
 mod eval;
+mod flow;
 mod http;
 
 use std::io::{self, IsTerminal, Read};
@@ -43,6 +44,38 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Start a new idea: creates <idea>/research and <idea>/code and makes
+    /// research the branch chat surfaces write to.
+    New {
+        /// Name of the idea / project.
+        name: String,
+    },
+    /// Save, show or list the project's spec (and other long documents).
+    #[command(subcommand)]
+    Spec(SpecCmd),
+    /// Hand an idea to a coding agent: repo + SPEC.md + AGENTS.md + wiring.
+    Build {
+        /// The idea / project to build.
+        name: String,
+        /// Directory to create (default: ./<name>).
+        dir: Option<PathBuf>,
+        #[arg(long, value_delimiter = ',')]
+        agents: Vec<String>,
+        #[arg(long)]
+        no_agents: bool,
+    },
+    /// Draw the project as a metro map (Mermaid): branches are lines, claims
+    /// are stations, colour is the kind.
+    Map {
+        /// Project (default: the current one).
+        project: Option<String>,
+        /// Most recent claims shown per branch.
+        #[arg(short = 'n', long, default_value_t = 12)]
+        per_branch: usize,
+        /// Write to a file (e.g. MAP.md) instead of printing.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Wire the current project: .ctx.yaml, AGENTS.md, agent configs. Idempotent.
     Init {
         /// Project name (default: the directory name).
@@ -209,6 +242,37 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+enum SpecCmd {
+    /// Save a spec from a file, stdin (-), or the clipboard (--paste). A
+    /// ````ctx-spec fenced block is unwrapped; plain markdown is taken as is.
+    Save {
+        file: Option<PathBuf>,
+        #[arg(long, conflicts_with = "file")]
+        paste: bool,
+        /// Document name.
+        #[arg(long, default_value = "spec")]
+        name: String,
+        #[arg(long)]
+        title: Option<String>,
+        /// Branch (default: current; specs usually live on <idea>/research).
+        #[arg(long)]
+        to: Option<String>,
+    },
+    /// Print a document (default: the spec).
+    Show {
+        #[arg(default_value = "spec")]
+        name: String,
+        #[arg(short, long)]
+        branch: Option<String>,
+    },
+    /// List documents visible from a branch.
+    Ls {
+        #[arg(short, long)]
+        branch: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
 enum BranchCmd {
     /// Create a branch: `ctx branch new gtm --parent research --template gtm`.
     New {
@@ -337,7 +401,63 @@ fn run(cli: Cli) -> Result<ExitCode> {
             branch,
             agents,
             no_agents,
-        } => init(&home, project, branch, &agents, no_agents)?,
+        } => init(&home, project, branch, &agents, no_agents, &cwd())?,
+        Command::New { name } => flow::new(&home, &name)?,
+        Command::Spec(cmd) => {
+            let mut app = open(&home)?;
+            match cmd {
+                SpecCmd::Save {
+                    file,
+                    paste,
+                    name,
+                    title,
+                    to,
+                } => {
+                    let text = match (paste, file.as_deref()) {
+                        (true, _) => clipboard::paste()?,
+                        (false, Some(p)) if p == Path::new("-") => read_stdin()?,
+                        (false, Some(p)) => std::fs::read_to_string(p)
+                            .with_context(|| format!("reading {}", p.display()))?,
+                        (false, None) if !io::stdin().is_terminal() => read_stdin()?,
+                        (false, None) => bail!("give a file, `-` for stdin, or --paste"),
+                    };
+                    let branch = app.resolve_branch(to.as_deref())?;
+                    flow::save(&mut app, &branch, &text, &name, title.as_deref())?;
+                }
+                SpecCmd::Show { name, branch } => {
+                    let b = app.resolve_branch(branch.as_deref())?;
+                    flow::show(&app, &b, &name)?;
+                }
+                SpecCmd::Ls { branch } => {
+                    let b = app.resolve_branch(branch.as_deref())?;
+                    flow::list(&app, &b)?;
+                }
+            }
+        }
+        Command::Build {
+            name,
+            dir,
+            agents,
+            no_agents,
+        } => flow::build(&home, &name, dir.as_deref(), &agents, no_agents)?,
+        Command::Map {
+            project,
+            per_branch,
+            out,
+        } => {
+            let app = open(&home)?;
+            let map = flow::map(&app, project.as_deref(), per_branch)?;
+            match out {
+                Some(p) => {
+                    std::fs::write(&p, &map).with_context(|| format!("writing {}", p.display()))?;
+                    eprintln!(
+                        "wrote {} (renders on GitHub and in most markdown viewers)",
+                        p.display()
+                    );
+                }
+                None => print!("{map}"),
+            }
+        }
         Command::Save {
             text,
             kind,
@@ -526,6 +646,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Refine { branch, threshold } => refine(&home, branch, threshold)?,
         Command::Sync => {
+            // (SPEC.md is refreshed below, after pulling new research.)
             let mut app = open(&home)?;
             let r = app.sync()?;
             match &r.remote {
@@ -537,6 +658,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 Some(url) => println!("synced with {url}"),
             }
             let _ = app.refresh_agents_md();
+            let _ = app.refresh_spec_file();
         }
         Command::Verify { root, branch } => {
             let app = open(&home)?;
@@ -740,8 +862,9 @@ fn init(
     branch: Option<String>,
     agents: &[String],
     no_agents: bool,
+    dir: &Path,
 ) -> Result<()> {
-    let root = repo_root(&cwd());
+    let root = repo_root(dir);
     let existing = Binding::discover(&root)?.filter(|b| b.root == root);
     let project = slug(
         &project
@@ -771,6 +894,7 @@ fn init(
     app.ensure_project(&project, &branch)?;
     let _ = ctx_daemon::ensure_token();
     app.refresh_agents_md()?;
+    let spec = app.refresh_spec_file()?;
 
     println!("ContextOS: {project}/{branch}");
     if created_store {
@@ -778,6 +902,15 @@ fn init(
     }
     println!("  ✓ .ctx.yaml   binds this repo to {project}/{branch} (commit it)");
     println!("  ✓ AGENTS.md   ContextOS section added; your own content is kept (commit it)");
+    match spec {
+        ctx_app::SpecFile::Written | ctx_app::SpecFile::Unchanged => {
+            println!("  ✓ SPEC.md     the spec from {project}'s research (commit it)")
+        }
+        ctx_app::SpecFile::LeftAlone => {
+            println!("  ! SPEC.md     exists and isn't ours (or was edited); left as is")
+        }
+        ctx_app::SpecFile::NoSpec => {}
+    }
 
     if !no_agents {
         let user_home = std::env::home_dir().unwrap_or_default();
@@ -1026,6 +1159,11 @@ fn session_start(home: &CtxHome) -> Result<()> {
     }
     if let Err(e) = app.pull_quick(Duration::from_millis(1500)) {
         eprintln!("ctx: pull skipped ({e})");
+    }
+    if let Ok(ctx_app::SpecFile::Written) = app.refresh_spec_file() {
+        println!(
+            "ContextOS: a new version of the spec was saved since your last session; SPEC.md is updated. Re-read it before continuing.\n"
+        );
     }
     if let Some(block) = app.refresh_agents_md()? {
         println!(
