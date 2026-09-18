@@ -1,0 +1,9 @@
+name = "contextos"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+
+# Non-secret configuration. Secrets (GITHUB_TOKEN, CTX_SECRET) are set with
+# `npx wrangler secret put <NAME>` and never live in this file.
+[vars]
+GITHUB_REPO = "OWNER/REPO"   # the private repo holding your ~/ctx
+GITHUB_BRANCH = "main"
