@@ -89,6 +89,29 @@ export default {
       return new Response("method not allowed", { status: 405, headers: { Allow: "POST" } });
     }
 
+    // Budget guard, checked before any GitHub call. The Workers Free plan
+    // allows 100,000 requests/day and never bills: past that, requests just
+    // fail until the daily reset. Capping at 62/min (at most 89,280/day)
+    // keeps this Worker safely under the limit. The rate limiting binding
+    // counts per Cloudflare location, so this is a close guard rather than
+    // an exact global counter; a single user's traffic comes from one
+    // location in practice.
+    if (env.LIMITER) {
+      const { success } = await env.LIMITER.limit({ key: "global" });
+      if (!success) {
+        return json(
+          rpcError(
+            null,
+            -32000,
+            "ContextOS daily budget guard: this Worker is capped at 62 requests/minute " +
+              "(about 89,000/day, under the Cloudflare free plan's 100,000/day). " +
+              "The limit resets within a minute; try again shortly.",
+          ),
+          429,
+        );
+      }
+    }
+
     let body: unknown;
     try {
       body = await request.json();

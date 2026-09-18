@@ -3,7 +3,7 @@
 // If one fails, fix the implementation; never edit the literal.
 
 import { describe, expect, it } from "vitest";
-import { canonicalContent, canonicalString, cid, type Kind } from "../src/canonical.js";
+import { canonicalContent, canonicalString, cid, docCid, normalizeText, type Kind } from "../src/canonical.js";
 
 function golden(
   kind: Kind,
@@ -165,3 +165,17 @@ describe("equivalences", () => {
     expect(cid("fact", "x", " \n")).toBe(cid("fact", "x"));
   });
 });
+
+describe("doc cid", () => {
+  it("golden: matches the independent Python BLAKE3", () => {
+    // python: blake3("# Spec\n\nBuild it.\n".encode()).hexdigest()
+    expect(docCid("# Spec\n\nBuild it.")).toBe(
+      "b3:85dc6e887b400e1986ea0a09195d1913f4528a3a83fd66339d96b6716543b9c5",
+    );
+  });
+
+  it("is computed over the normalised body", () => {
+    expect(docCid(normalizeText("# Spec  \r\n\r\nBuild it.\r\n\r\n"))).toBe(docCid("# Spec\n\nBuild it."));
+  });
+});
+

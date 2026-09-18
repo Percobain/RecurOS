@@ -7,3 +7,15 @@ compatibility_date = "2025-09-01"
 [vars]
 GITHUB_REPO = "OWNER/REPO"   # the private repo holding your ~/ctx
 GITHUB_BRANCH = "main"
+
+# Request budget guard. The Workers Free plan allows 100,000 requests/day and
+# never bills: requests over the limit simply fail until the daily reset.
+# This caps the Worker at 62 requests per 60 seconds, i.e. at most
+# 62 * 1440 = 89,280 requests/day, safely under that limit. To change it,
+# edit `limit` (requests) and `period` (10 or 60 seconds) below.
+# The binding counts per Cloudflare location, so it is a close guard, not an
+# exact global counter. namespace_id is any integer unique to your account.
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+simple = { limit = 62, period = 60 }

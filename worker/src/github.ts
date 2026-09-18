@@ -8,6 +8,11 @@ export interface Env {
   GITHUB_REPO: string; // "owner/name"
   GITHUB_BRANCH?: string;
   CTX_SECRET: string;
+  /**
+   * Workers Rate Limiting binding (see wrangler.toml). Optional so tests
+   * and `wrangler dev` without the binding still work.
+   */
+  LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
 }
 
 export class GitHubError extends Error {
@@ -106,10 +111,17 @@ export async function listTree(env: Env): Promise<TreeEntry[]> {
 }
 
 /**
- * Append one line to a file, creating it if needed. GitHub's Contents API is
- * compare-and-swap on the blob sha, so concurrent Worker instances can race;
- * on a sha conflict we re-read and retry.
+ * Append one or more lines to a file in a single commit, creating it if
+ * needed. GitHub's Contents API is compare-and-swap on the blob sha, so
+ * concurrent Worker instances can race; on a sha conflict we re-read and
+ * retry. Several lines in one PUT means a doc and the claim that refers to
+ * it land atomically.
  */
+export async function appendLines(env: Env, path: string, lines: string[], message: string): Promise<void> {
+  await appendLine(env, path, lines.map((l) => (l.endsWith("\n") ? l : l + "\n")).join(""), message);
+}
+
+/** Append text ending in one or more complete lines (see appendLines). */
 export async function appendLine(env: Env, path: string, line: string, message: string): Promise<void> {
   for (let attempt = 0; attempt < 5; attempt++) {
     const existing = await getFile(env, path);

@@ -136,6 +136,15 @@ export function cid(
   return cidOf(canonicalContent(kind, text, why, refs, entities));
 }
 
+/**
+ * Content address of a document body that is already normalised with
+ * normalizeText: "b3:" + hex(BLAKE3(utf8(body) + "\n")). Mirrors Rust
+ * `ctx_core::record::doc_cid`.
+ */
+export function docCid(normalizedBody: string): string {
+  return "b3:" + bytesToHex(blake3(new TextEncoder().encode(normalizedBody + "\n")));
+}
+
 /** True if nothing but whitespace remains — such claims are rejected. */
 export function isBlank(s: string): boolean {
   return trimStartWs(trimEndWs(s)) === "";

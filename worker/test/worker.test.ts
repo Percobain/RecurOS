@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { canonicalContent, cidOf } from "../src/canonical.js";
 import worker, { type Env } from "../src/index.js";
-import { base64ToUtf8 } from "../src/github.js";
-import { buildClaim, parseLog, search, validBranch } from "../src/tools.js";
+import { base64ToUtf8, utf8ToBase64 } from "../src/github.js";
+import { buildClaim, buildDoc, parseDocs, parseLog, search, validBranch } from "../src/tools.js";
 import { ulid } from "../src/ulid.js";
 
 const env: Env = { GITHUB_TOKEN: "t", GITHUB_REPO: "me/ctx", GITHUB_BRANCH: "main", CTX_SECRET: "s3cret" };
@@ -144,5 +144,166 @@ describe("router", () => {
     const body = (await res.json()) as { result: { isError: boolean; content: { text: string }[] } };
     expect(body.result.isError).toBe(true);
     expect(body.result.content[0]!.text).toMatch(/invalid kind/);
+  });
+});
+
+// ---- a tiny in-memory GitHub -------------------------------------------------
+
+/** Serves `files` through the Contents, Trees and Blobs APIs and records PUTs. */
+function fakeGitHub(files: Record<string, string>) {
+  const puts: { path: string; text: string }[] = [];
+  const sha = (path: string) => `sha-${path}`;
+  vi.stubGlobal("fetch", async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    const contents = u.pathname.match(/^\/repos\/me\/ctx\/contents\/(.+)$/);
+    const blob = u.pathname.match(/^\/repos\/me\/ctx\/git\/blobs\/(.+)$/);
+    if (init?.method === "PUT" && contents) {
+      const path = decodeURIComponent(contents[1]!);
+      const body = JSON.parse(init.body as string) as { content: string };
+      const text = base64ToUtf8(body.content);
+      puts.push({ path, text });
+      files[path] = text;
+      return new Response("{}", { status: 201 });
+    }
+    if (contents) {
+      const path = decodeURIComponent(contents[1]!);
+      if (!(path in files)) return new Response("{}", { status: 404 });
+      return Response.json({ sha: sha(path), encoding: "base64", content: utf8ToBase64(files[path]!) });
+    }
+    if (u.pathname.startsWith("/repos/me/ctx/git/trees/")) {
+      return Response.json({ tree: Object.keys(files).map((p) => ({ path: p, type: "blob", sha: sha(p) })) });
+    }
+    if (blob) {
+      const path = decodeURIComponent(blob[1]!).slice("sha-".length);
+      return Response.json({ content: utf8ToBase64(files[path] ?? "") });
+    }
+    return new Response("{}", { status: 404 });
+  });
+  return puts;
+}
+
+async function call(name: string, args: Record<string, unknown>, e: Env = env) {
+  const res = await worker.fetch(
+    new Request("https://w.example/mcp/s3cret", {
+      method: "POST",
+      body: JSON.stringify({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name, arguments: args } }),
+    }),
+    e,
+  );
+  const body = (await res.json()) as { result: { content: { text: string }[]; isError?: boolean } };
+  return { status: res.status, text: body.result.content[0]!.text, isError: body.result.isError };
+}
+
+const SPEC = "# Tiny Todo\n\nA todo app.\n\n```sh\nnpm start\n```\n";
+
+describe("documents", () => {
+  it("buildDoc normalises, derives the title and verifies against the golden cid", () => {
+    const d = buildDoc({ branch: "p/research", body: "# Spec  \r\n\r\nBuild it.\r\n", now: new Date("2026-09-18T12:00:00Z") });
+    expect(Object.keys(d)).toEqual(["rec", "id", "branch", "name", "title", "body", "cid", "src", "t_tx"]);
+    expect(d.name).toBe("spec");
+    expect(d.title).toBe("Spec");
+    expect(d.body).toBe("# Spec\n\nBuild it.");
+    expect(d.cid).toBe("b3:85dc6e887b400e1986ea0a09195d1913f4528a3a83fd66339d96b6716543b9c5");
+    expect(() => buildDoc({ branch: "p/r", name: "My Spec", body: "x" })).toThrow(/doc_name/);
+    expect(() => buildDoc({ branch: "p/r", body: " \n " })).toThrow(/empty/);
+  });
+
+  it("parseDocs keeps the newest version per (branch, name) and drops bad cids", () => {
+    const a = buildDoc({ branch: "p/research", body: "# v1", now: new Date(1_000) });
+    const b = buildDoc({ branch: "p/research", body: "# v2", now: new Date(2_000) });
+    const bad = { ...buildDoc({ branch: "p/research", name: "notes", body: "x" }), body: "tampered" };
+    const docs = parseDocs([[a, b, bad].map((r) => JSON.stringify(r)).join("\n")]);
+    expect(docs.map((d) => d.title)).toEqual(["v2"]);
+  });
+
+  it("ctx_append with doc writes the doc and the claim in one PUT, claim refs doc:spec", async () => {
+    const puts = fakeGitHub({ "refs/active": "tiny/research\n" });
+    const r = await call("ctx_append", { kind: "decision", text: "Build Tiny Todo per the spec", doc: SPEC });
+    expect(r.isError).toBeUndefined();
+    expect(r.text).toMatch(/Saved decision to tiny\/research/);
+    expect(r.text).toMatch(/Saved document "spec" \("Tiny Todo"\)/);
+    expect(puts).toHaveLength(1);
+    expect(puts[0]!.path).toMatch(/^log\/cloud\/\d{4}-\d{2}\.jsonl$/);
+    const lines = puts[0]!.text.trimEnd().split("\n").map((l) => JSON.parse(l));
+    expect(lines.map((l) => l.rec)).toEqual(["doc", "claim"]);
+    expect(lines[0].branch).toBe("tiny/research");
+    expect(lines[0].body).toBe("# Tiny Todo\n\nA todo app.\n\n```sh\nnpm start\n```");
+    expect(lines[1].refs).toEqual(["doc:spec"]);
+    expect(lines[0].id < lines[1].id).toBe(true);
+  });
+
+  it("an identical doc is not written twice, but the claim still is", async () => {
+    const files: Record<string, string> = {};
+    const puts = fakeGitHub(files);
+    await call("ctx_append", { branch: "tiny/research", kind: "decision", text: "Spec v1", doc: SPEC });
+    const r = await call("ctx_append", { branch: "tiny/research", kind: "decision", text: "Spec v1 again", doc: SPEC });
+    expect(r.text).toMatch(/unchanged, so it was not saved again/);
+    expect(puts).toHaveLength(2);
+    const second = puts[1]!.text.trimEnd().split("\n").map((l) => JSON.parse(l));
+    // The second PUT holds the whole file: doc, claim, then only the new claim.
+    expect(second.map((l) => l.rec)).toEqual(["doc", "claim", "claim"]);
+  });
+
+  it("ctx_pack doc reads the spec, falling back to another branch of the project", async () => {
+    const doc = buildDoc({ branch: "tiny/research", body: SPEC });
+    fakeGitHub({ "log/cloud/2026-09.jsonl": JSON.stringify(doc) + "\n", "refs/active": "tiny/code" });
+    const r = await call("ctx_pack", { doc: "spec" });
+    expect(r.text.startsWith("# Tiny Todo\n\n# Tiny Todo\n\nA todo app.")).toBe(true);
+    const missing = await call("ctx_pack", { branch: "tiny/code", doc: "design" });
+    expect(missing.text).toMatch(/No document named "design".*Available: spec\./);
+  });
+});
+
+describe("active branch", () => {
+  it("tools default to refs/active and ctx_index reports it", async () => {
+    const puts = fakeGitHub({
+      "refs/active": "idea/research\n",
+      "packs/index.md": "# ContextOS index\n\nCurrent branch: `default`\n",
+    });
+    const idx = await call("ctx_index", {});
+    expect(idx.text).toMatch(/Current branch: `idea\/research`/);
+    expect(idx.text).not.toMatch(/`default`/);
+    await call("ctx_append", { kind: "fact", text: "Users want offline mode" });
+    expect(JSON.parse(puts[0]!.text.trimEnd()).branch).toBe("idea/research");
+  });
+
+  it("falls back to default without refs/active", async () => {
+    const puts = fakeGitHub({});
+    await call("ctx_append", { kind: "fact", text: "x" });
+    expect(JSON.parse(puts[0]!.text.trimEnd()).branch).toBe("default");
+  });
+});
+
+describe("rate limit guard", () => {
+  it("returns 429 with a JSON-RPC error when the limiter refuses, before touching GitHub", async () => {
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+    const limited: Env = { ...env, LIMITER: { limit: async () => ({ success: false }) } };
+    const res = await worker.fetch(
+      new Request("https://w.example/mcp/s3cret", {
+        method: "POST",
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
+      }),
+      limited,
+    );
+    expect(res.status).toBe(429);
+    const body = (await res.json()) as { error: { code: number; message: string } };
+    expect(body.error.code).toBe(-32000);
+    expect(body.error.message).toMatch(/62 requests\/minute/);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("passes through when the limiter allows, and keys globally", async () => {
+    const keys: string[] = [];
+    const ok: Env = { ...env, LIMITER: { limit: async ({ key }) => (keys.push(key), { success: true }) } };
+    const res = await worker.fetch(
+      new Request("https://w.example/mcp/s3cret", {
+        method: "POST",
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping" }),
+      }),
+      ok,
+    );
+    expect(res.status).toBe(200);
+    expect(keys).toEqual(["global"]);
   });
 });

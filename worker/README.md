@@ -1,4 +1,4 @@
-# ContextOS Worker — claude.ai & ChatGPT connector
+# ContextOS Worker: claude.ai & ChatGPT connector
 
 A tiny, stateless [MCP](https://modelcontextprotocol.io) server on Cloudflare
 Workers. It gives claude.ai and ChatGPT the same five `ctx_*` tools your local
@@ -109,17 +109,61 @@ In a new chat:
 
 Back on your laptop, `ctx sync` then `ctx log` shows the claim with `src: cloud`.
 
+## The idea-to-build flow
+
+This is the path the Worker is built for: an idea starts in a chat and ends
+in a coding agent, without copying anything by hand.
+
+1. **Start the idea on your laptop:** `ctx new <idea>`, then `ctx sync`. This
+   creates `<idea>/research` and `<idea>/code` and makes research the active
+   branch. The Worker reads `refs/active`, so from now on chat tools save to
+   `<idea>/research` without you naming a branch.
+2. **Research in claude.ai or ChatGPT** with the connector enabled. Ask the
+   model to `ctx save` decisions, facts, rejected ideas and open questions as
+   they come up.
+3. **Say "ctx spec"** when the research is done. The model writes the full
+   spec and saves it with `ctx_append`: a one-line decision as the claim, and
+   the complete markdown in `doc`. It lands in `log/cloud/` as a `doc` record
+   plus a claim that refers to it (`doc:spec`).
+4. **Build:** on your laptop, `ctx build <idea>` pulls the spec, creates a
+   project folder with `SPEC.md`, `AGENTS.md` and the agent wiring, and then
+   you run `claude` in it.
+
+Any chat can read the spec back with `ctx_pack(doc: "spec")`.
+
 ## Tools
 
 | Tool | What it does |
 |---|---|
-| `ctx_index()` | Overview of all projects and branches (`packs/index.md`) |
-| `ctx_pack(branch, task?, budget?)` | The compiled pack for a branch; with `task`, adds matching claims |
+| `ctx_index()` | Overview of all projects and branches (`packs/index.md`), with the current branch |
+| `ctx_pack(branch?, task?, budget?, doc?)` | The compiled pack for a branch; with `task`, adds matching claims; with `doc`, returns that document (e.g. `spec`) instead |
 | `ctx_search(query, branch?)` | Keyword search over all claims |
-| `ctx_append(branch, kind, text, why?, refs?)` | Save a claim |
+| `ctx_append(kind, text, branch?, why?, refs?, doc?, doc_name?)` | Save a claim; with `doc`, also save a document (default name `spec`) in the same commit |
 | `ctx_propose(target_branch, kind, text, why?)` | Propose a claim; review locally with `ctx review` |
 
 `kind` is one of `fact`, `decision`, `rejected`, `constraint`, `question`, `claim`.
+When `branch` is omitted, tools use the branch in `refs/active` (set on your
+laptop with `ctx use` or `ctx new`), or `default` if there is none.
+
+## Cost and limits
+
+- **The Workers Free plan never bills you.** It allows 100,000 requests per
+  day. Past that, requests simply fail until the daily reset; nothing is
+  charged. Billing only exists if you move the account to Workers Paid.
+- **This Worker caps itself below that anyway.** A Rate Limiting binding in
+  `wrangler.toml` allows 62 requests per 60 seconds, which is at most
+  62 x 1,440 = 89,280 requests per day. Over the cap, the connector returns
+  HTTP 429 with a JSON-RPC error explaining the guard, and it recovers within
+  a minute.
+- **To change the cap**, edit `limit` (and `period`, which must be 10 or 60
+  seconds) in the `[[ratelimits]]` block of `wrangler.toml` and redeploy.
+  The counter is kept per Cloudflare location, so it is a close guard rather
+  than an exact global count; one person's traffic comes from one location
+  in practice.
+- **It is bring-your-own-account by design.** Every user deploys this Worker
+  to their own free Cloudflare account and points it at their own private
+  GitHub repo. Nobody shares a quota, and there is no ContextOS server whose
+  bill could grow.
 
 ## Troubleshooting
 

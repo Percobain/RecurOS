@@ -1,9 +1,9 @@
 // The five MCP tools (spec §9.1), backed by the GitHub copy of ~/ctx.
 // Packs are precompiled by `ctx sync` into packs/, so the Worker never runs
-// the packer; it serves files, does keyword search, and appends claims.
+// the packer; it serves files, does keyword search, and appends records.
 
-import { canonicalContent, cidOf, isBlank, isKind, KINDS, type Kind } from "./canonical.js";
-import { appendLine, getBlob, getFile, listTree, type Env } from "./github.js";
+import { canonicalContent, cidOf, docCid, isBlank, isKind, KINDS, normalizeText, type Kind } from "./canonical.js";
+import { appendLines, getBlob, getFile, listTree, type Env } from "./github.js";
 import { ulid } from "./ulid.js";
 
 export interface ToolDef {
@@ -13,7 +13,7 @@ export interface ToolDef {
 }
 
 const kindSchema = { type: "string", enum: [...KINDS] };
-const branchDesc = 'Branch as "project/branch", e.g. "sovereign/research".';
+const branchDesc = 'Branch as "project/branch", e.g. "sovereign/research". Defaults to the active branch.';
 
 export const TOOLS: ToolDef[] = [
   {
@@ -23,15 +23,16 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "ctx_pack",
-    description: "Compiled context for a branch. Optionally add claims relevant to a task.",
+    description:
+      "Compiled context for a branch. Optionally add claims relevant to a task, or pass doc (e.g. \"spec\") to read a saved document.",
     inputSchema: {
       type: "object",
       properties: {
         branch: { type: "string", description: branchDesc },
         task: { type: "string" },
         budget: { type: "integer" },
+        doc: { type: "string", description: 'Document name to read, e.g. "spec".' },
       },
-      required: ["branch"],
     },
   },
   {
@@ -45,7 +46,9 @@ export const TOOLS: ToolDef[] = [
   },
   {
     name: "ctx_append",
-    description: "Record a claim. Only when the user explicitly asks to save.",
+    description:
+      "Record a claim. Only when the user explicitly asks to save. To save a spec or long document, " +
+      'use kind "decision", a one-line summary as text, and the full markdown in doc.',
     inputSchema: {
       type: "object",
       properties: {
@@ -54,8 +57,10 @@ export const TOOLS: ToolDef[] = [
         text: { type: "string" },
         why: { type: "string" },
         refs: { type: "array", items: { type: "string" } },
+        doc: { type: "string", description: "Full markdown of a spec or document to attach." },
+        doc_name: { type: "string", description: 'Document name, default "spec".' },
       },
-      required: ["branch", "kind", "text"],
+      required: ["kind", "text"],
     },
   },
   {
@@ -99,11 +104,24 @@ function str(args: Record<string, unknown>, key: string, required: boolean): str
 }
 
 function branchArg(args: Record<string, unknown>, key: string, required: boolean): string | undefined {
-  const b = str(args, key, required);
+  const raw = str(args, key, required);
+  const b = raw?.trim() === "" ? undefined : raw;
+  if (b === undefined && required) throw new ToolError(`missing argument: ${key}`);
   if (b !== undefined && !validBranch(b)) {
     throw new ToolError(`invalid branch "${b}": use lowercase "project/branch"`);
   }
   return b;
+}
+
+/**
+ * The branch `ctx use` selected on the laptop (refs/active), published with
+ * the store. Chat surfaces default to it so the user never has to type a
+ * branch name in a chat.
+ */
+export async function activeBranch(env: Env): Promise<string> {
+  const f = await getFile(env, "refs/active");
+  const b = f?.text.trim();
+  return b && validBranch(b) ? b : "default";
 }
 
 // ---- claim construction (protocol §2) -------------------------------------
@@ -168,6 +186,63 @@ export function buildClaim(input: {
   return rec;
 }
 
+// ---- documents (protocol §2, `doc` record) ------------------------------
+
+export interface DocRecord {
+  rec: "doc";
+  id: string;
+  branch: string;
+  name: string;
+  title: string;
+  body: string;
+  cid: string;
+  src: string;
+  t_tx: string;
+}
+
+/** Same rule as Rust `Doc::new`: lowercase letters, digits and '-'. */
+export function validDocName(n: string): boolean {
+  return n.length > 0 && n.length <= 64 && /^[a-z0-9-]+$/.test(n);
+}
+
+function deriveTitle(body: string, name: string): string {
+  for (const line of body.split("\n")) {
+    const t = line.trim();
+    if (!t) continue;
+    const title = [...t.replace(/^#+/, "").trim()].slice(0, 120).join("");
+    return title || name;
+  }
+  return name;
+}
+
+export function buildDoc(input: {
+  branch: string;
+  name?: string;
+  title?: string;
+  body: string;
+  now?: Date;
+}): DocRecord {
+  if (!validBranch(input.branch)) throw new ToolError(`invalid branch "${input.branch}"`);
+  const name = (input.name ?? "spec").trim().toLowerCase();
+  if (!validDocName(name)) throw new ToolError(`invalid doc_name "${name}": use lowercase letters, digits and '-'`);
+  const body = normalizeText(input.body);
+  if (isBlank(body)) throw new ToolError("doc is empty");
+  const givenTitle = input.title !== undefined ? normalizeText(input.title).trim() : "";
+  const now = input.now ?? new Date();
+  // Key order mirrors the Rust serializer.
+  return {
+    rec: "doc",
+    id: ulid(now.getTime()),
+    branch: input.branch,
+    name,
+    title: givenTitle || deriveTitle(body, name),
+    body,
+    cid: docCid(body),
+    src: "cloud",
+    t_tx: now.toISOString(),
+  };
+}
+
 function shardPath(now: Date): string {
   const m = String(now.getUTCMonth() + 1).padStart(2, "0");
   return `log/cloud/${now.getUTCFullYear()}-${m}.jsonl`;
@@ -186,31 +261,44 @@ interface LoggedClaim {
   status: string;
 }
 
+export interface LoggedDoc {
+  id: string;
+  branch: string;
+  name: string;
+  title: string;
+  body: string;
+  cid: string;
+}
+
 const STATUS_RANK: Record<string, number> = { proposed: 0, active: 1, superseded: 2, rejected: 3, archived: 4 };
 
 function maxStatus(a: string, b: string): string {
   return (STATUS_RANK[b] ?? -1) > (STATUS_RANK[a] ?? -1) ? b : a;
 }
 
+function* records(files: string[]): Generator<Record<string, unknown>> {
+  for (const file of files) {
+    for (const line of file.split("\n")) {
+      if (!line.trim()) continue;
+      try {
+        yield JSON.parse(line);
+      } catch {
+        // torn or corrupt line: skip, never fail
+      }
+    }
+  }
+}
+
 /** All claims in the log, with effective status applied (protocol §2). */
 export function parseLog(files: string[]): LoggedClaim[] {
   const claims = new Map<string, LoggedClaim>();
   const transitions: { claim: string; to: string }[] = [];
-  for (const file of files) {
-    for (const line of file.split("\n")) {
-      if (!line.trim()) continue;
-      let r: Record<string, unknown>;
-      try {
-        r = JSON.parse(line);
-      } catch {
-        continue; // torn or corrupt line: skip, never fail
-      }
-      if (r.rec === "claim" && typeof r.id === "string" && typeof r.text === "string") {
-        claims.set(r.id, r as unknown as LoggedClaim);
-        if (typeof r.supersedes === "string") transitions.push({ claim: r.supersedes, to: "superseded" });
-      } else if (r.rec === "status" && typeof r.claim === "string" && typeof r.to === "string") {
-        transitions.push({ claim: r.claim, to: r.to });
-      }
+  for (const r of records(files)) {
+    if (r.rec === "claim" && typeof r.id === "string" && typeof r.text === "string") {
+      claims.set(r.id, r as unknown as LoggedClaim);
+      if (typeof r.supersedes === "string") transitions.push({ claim: r.supersedes, to: "superseded" });
+    } else if (r.rec === "status" && typeof r.claim === "string" && typeof r.to === "string") {
+      transitions.push({ claim: r.claim, to: r.to });
     }
   }
   for (const t of transitions) {
@@ -220,7 +308,55 @@ export function parseLog(files: string[]): LoggedClaim[] {
   return [...claims.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
-async function readLog(env: Env): Promise<LoggedClaim[]> {
+/**
+ * The current version of every document: for each (branch, name), the doc
+ * record with the greatest id. Records whose cid doesn't match their body
+ * are skipped, like the Rust reader does.
+ */
+export function parseDocs(files: string[]): LoggedDoc[] {
+  const latest = new Map<string, LoggedDoc>();
+  for (const r of records(files)) {
+    if (
+      r.rec !== "doc" ||
+      typeof r.id !== "string" ||
+      typeof r.branch !== "string" ||
+      typeof r.name !== "string" ||
+      typeof r.body !== "string" ||
+      typeof r.cid !== "string"
+    ) {
+      continue;
+    }
+    if (docCid(normalizeText(r.body)) !== r.cid) continue;
+    const key = `${r.branch} ${r.name}`;
+    const prev = latest.get(key);
+    if (!prev || r.id > prev.id) {
+      latest.set(key, {
+        id: r.id,
+        branch: r.branch,
+        name: r.name,
+        title: typeof r.title === "string" ? r.title : r.name,
+        body: r.body,
+        cid: r.cid,
+      });
+    }
+  }
+  return [...latest.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
+}
+
+/**
+ * Find the current `name` doc: on `branch` itself first, then the newest one
+ * on any branch of the same project (a spec written on research is what the
+ * code branch builds from).
+ */
+export function findDoc(docs: LoggedDoc[], branch: string, name: string): LoggedDoc | undefined {
+  const exact = docs.filter((d) => d.branch === branch && d.name === name);
+  if (exact.length) return exact[exact.length - 1];
+  const project = branch.includes("/") ? branch.slice(0, branch.indexOf("/")) : branch;
+  const sameProject = docs.filter((d) => d.name === name && d.branch.startsWith(project + "/"));
+  return sameProject[sameProject.length - 1];
+}
+
+async function readLogFiles(env: Env): Promise<string[]> {
   const tree = await listTree(env);
   const shards = tree.filter((e) => e.type === "blob" && e.path.startsWith("log/") && e.path.endsWith(".jsonl"));
   const files: string[] = [];
@@ -228,7 +364,7 @@ async function readLog(env: Env): Promise<LoggedClaim[]> {
   for (let i = 0; i < shards.length; i += 8) {
     files.push(...(await Promise.all(shards.slice(i, i + 8).map((s) => getBlob(env, s.sha)))));
   }
-  return parseLog(files);
+  return files;
 }
 
 function words(s: string): string[] {
@@ -267,12 +403,28 @@ export function renderClaims(claims: LoggedClaim[]): string {
 export async function callTool(env: Env, name: string, args: Record<string, unknown>): Promise<string> {
   switch (name) {
     case "ctx_index": {
-      const f = await getFile(env, "packs/index.md");
-      return f?.text ?? "No index yet. Run `ctx sync` on a machine with ContextOS to publish packs.";
+      const [f, active] = await Promise.all([getFile(env, "packs/index.md"), activeBranch(env)]);
+      const body = f?.text ?? "No index yet. Run `ctx sync` on a machine with ContextOS to publish packs.";
+      // The published index names the laptop's current branch too, but the
+      // Worker's view of refs/active is what its tools actually default to.
+      return /^Current branch:/m.test(body)
+        ? body.replace(/^Current branch:.*$/m, `Current branch: \`${active}\``)
+        : `Current branch: \`${active}\`\n\n${body}`;
     }
     case "ctx_pack": {
-      const branch = branchArg(args, "branch", true)!;
+      const branch = branchArg(args, "branch", false) ?? (await activeBranch(env));
       const task = str(args, "task", false);
+      const docName = str(args, "doc", false)?.trim().toLowerCase();
+      if (docName) {
+        const docs = parseDocs(await readLogFiles(env));
+        const doc = findDoc(docs, branch, docName);
+        if (doc) return `# ${doc.title}\n\n${doc.body}\n`;
+        const names = [...new Set(docs.filter((d) => d.branch.split("/")[0] === branch.split("/")[0]).map((d) => d.name))];
+        return (
+          `No document named "${docName}" for ${branch}. ` +
+          (names.length ? `Available: ${names.join(", ")}.` : "No documents saved for this project yet.")
+        );
+      }
       const f = await getFile(env, `packs/${branch}.md`);
       let out: string;
       if (f) {
@@ -288,7 +440,7 @@ export async function callTool(env: Env, name: string, args: Record<string, unkn
             : "No packs published yet: run `ctx sync` on a machine with ContextOS.");
       }
       if (task && task.trim()) {
-        const hits = search(await readLog(env), task, branch);
+        const hits = search(parseLog(await readLogFiles(env)), task, branch);
         if (hits.length) out += `\n\n## Relevant to: ${task}\n\n${renderClaims(hits)}\n`;
       }
       return out;
@@ -296,28 +448,57 @@ export async function callTool(env: Env, name: string, args: Record<string, unkn
     case "ctx_search": {
       const query = str(args, "query", true)!;
       const branch = branchArg(args, "branch", false);
-      const hits = search(await readLog(env), query, branch);
+      const hits = search(parseLog(await readLogFiles(env)), query, branch);
       return hits.length ? renderClaims(hits) : "No matching claims.";
     }
     case "ctx_append":
     case "ctx_propose": {
       const propose = name === "ctx_propose";
-      const branch = branchArg(args, propose ? "target_branch" : "branch", true)!;
+      const branch = propose
+        ? branchArg(args, "target_branch", true)!
+        : (branchArg(args, "branch", false) ?? (await activeBranch(env)));
       const now = new Date();
+      const docBody = propose ? undefined : str(args, "doc", false);
+      const hasDoc = docBody !== undefined && !isBlank(docBody);
+
+      let doc: DocRecord | undefined;
+      let refs = propose ? undefined : args.refs;
+      if (hasDoc) {
+        doc = buildDoc({ branch, name: str(args, "doc_name", false), body: docBody!, now });
+        const extra = `doc:${doc.name}`;
+        refs = Array.isArray(refs) ? [...refs, extra] : [extra];
+      }
       const rec = buildClaim({
         branch,
         kind: str(args, "kind", true)!,
         text: str(args, "text", true)!,
         why: str(args, "why", false),
-        refs: propose ? undefined : args.refs,
+        refs,
         status: propose ? "proposed" : "active",
         now,
       });
-      await appendLine(env, shardPath(now), JSON.stringify(rec), `ctx: ${propose ? "propose" : "append"} ${rec.kind} to ${branch} (cloud)`);
+
+      // Dedup: an identical current version of the doc is not written again.
+      let docSkipped = false;
+      if (doc) {
+        const current = findDoc(parseDocs(await readLogFiles(env)), branch, doc.name);
+        docSkipped = current !== undefined && current.branch === branch && current.cid === doc.cid;
+      }
+      const lines = [...(doc && !docSkipped ? [JSON.stringify(doc)] : []), JSON.stringify(rec)];
+      const what = doc && !docSkipped ? `${rec.kind} + doc "${doc.name}"` : rec.kind;
+      await appendLines(env, shardPath(now), lines, `ctx: ${propose ? "propose" : "append"} ${what} to ${branch} (cloud)`);
+
       const tag = rec.cid.slice(3, 7);
-      return propose
-        ? `Proposed ${rec.kind} for ${branch} [c:${tag}] (id ${rec.id}); it will appear after review with \`ctx review\`.`
-        : `Saved ${rec.kind} to ${branch} [c:${tag}] (id ${rec.id}).`;
+      if (propose) {
+        return `Proposed ${rec.kind} for ${branch} [c:${tag}] (id ${rec.id}); it will appear after review with \`ctx review\`.`;
+      }
+      let msg = `Saved ${rec.kind} to ${branch} [c:${tag}] (id ${rec.id}).`;
+      if (doc) {
+        msg += docSkipped
+          ? ` Document "${doc.name}" is unchanged, so it was not saved again.`
+          : ` Saved document "${doc.name}" ("${doc.title}"). On the laptop, \`ctx build\` turns it into SPEC.md for a coding agent.`;
+      }
+      return msg;
     }
     default:
       throw new ToolError(`unknown tool: ${name}`);
