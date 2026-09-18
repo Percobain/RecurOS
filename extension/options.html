@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ContextOS options</title>
+  <style>
+    body { max-width: 560px; margin: 24px auto; padding: 0 16px; font: 14px/1.5 system-ui, sans-serif; color: #111; }
+    h1 { font-size: 18px; }
+    label { display: block; margin: 14px 0 4px; font-weight: 600; }
+    input { width: 100%; box-sizing: border-box; padding: 6px 8px; font: inherit; }
+    .hint { color: #555; font-size: 13px; margin-top: 4px; }
+    code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px; }
+    .row { display: flex; gap: 8px; margin-top: 18px; }
+    button { padding: 7px 14px; font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid #4f46e5; background: #fff; color: #4f46e5; }
+    #save { background: #4f46e5; color: #fff; }
+    #status { margin-top: 14px; white-space: pre-wrap; }
+    .err { color: #b91c1c; }
+    .ok { color: #047857; }
+  </style>
+</head>
+<body>
+  <h1>ContextOS</h1>
+
+  <label for="url">ctxd URL</label>
+  <input id="url" placeholder="http://127.0.0.1:7777">
+  <div class="hint">Start the local daemon with <code>ctx daemon</code>. It only listens on 127.0.0.1.</div>
+
+  <label for="token">Token</label>
+  <input id="token" type="password" autocomplete="off" placeholder="paste token">
+  <div class="hint">Print it with <code>ctx daemon token</code> (it lives in <code>~/.ctx/token</code>). Stored only in this browser.</div>
+
+  <label for="branch">Default branch (optional)</label>
+  <input id="branch" placeholder="e.g. sovereign/research">
+  <div class="hint">Used for the Alt+Shift+C shortcut and for saved claims. Empty = the store's active branch (<code>ctx use</code>).</div>
+
+  <div class="row">
+    <button id="save">Save</button>
+    <button id="test">Test connection</button>
+  </div>
+  <div id="status"></div>
+  <script src="options.js"></script>
+</body>
+</html>

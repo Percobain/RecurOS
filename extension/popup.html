@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ContextOS</title>
+  <style>
+    body { width: 300px; margin: 0; padding: 12px; font: 13px/1.4 system-ui, sans-serif; color: #111; }
+    h1 { font-size: 14px; margin: 0 0 10px; }
+    label { display: block; margin: 8px 0 3px; font-weight: 500; }
+    select, input { width: 100%; box-sizing: border-box; padding: 5px 6px; font: inherit; }
+    .row { display: flex; gap: 6px; margin-top: 12px; }
+    button { flex: 1; padding: 6px; font: inherit; cursor: pointer; border-radius: 6px; border: 1px solid #4f46e5; }
+    #insert { background: #4f46e5; color: #fff; }
+    #copy { background: #fff; color: #4f46e5; }
+    #status { margin-top: 10px; min-height: 1.4em; white-space: pre-wrap; }
+    .err { color: #b91c1c; }
+    .ok { color: #047857; }
+    footer { margin-top: 8px; font-size: 12px; }
+    code { background: #f3f4f6; padding: 0 3px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <h1>ContextOS</h1>
+  <label for="branch">Branch</label>
+  <select id="branch"><option value="">(active branch)</option></select>
+  <label for="task">Task (optional)</label>
+  <input id="task" placeholder="e.g. settlement design">
+  <label for="budget">Budget (tokens)</label>
+  <input id="budget" type="number" min="100" step="100" value="4000">
+  <div class="row">
+    <button id="insert">Insert context</button>
+    <button id="copy">Copy</button>
+  </div>
+  <div id="status"></div>
+  <footer><a href="#" id="options">Options</a></footer>
+  <script src="popup.js"></script>
+</body>
+</html>
