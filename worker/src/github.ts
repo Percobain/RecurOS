@@ -41,10 +41,20 @@ function encodePath(path: string): string {
 }
 
 async function gh(env: Env, path: string, init: RequestInit = {}): Promise<Response> {
+  // A missing secret would otherwise be sent as "Bearer undefined" and come
+  // back from GitHub as a confusing 401. Also tolerate stray whitespace from
+  // pasting the token into `wrangler secret put`.
+  const token = (env.GITHUB_TOKEN ?? "").trim();
+  if (!token) {
+    throw new Error(
+      "the GITHUB_TOKEN secret is not set on this Worker. Run `npx wrangler secret put GITHUB_TOKEN` " +
+        "in the worker/ directory and paste the token when prompted (the name is literally GITHUB_TOKEN).",
+    );
+  }
   return fetch(API + path, {
     ...init,
     headers: {
-      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
       "User-Agent": "contextos-worker",
