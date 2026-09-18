@@ -1,456 +1,420 @@
 # ContextOS
 
-**One shared memory for every AI tool you use.**
+**One memory for all your AI tools.**
 
-You make a decision in Claude Code. Next week, ChatGPT suggests the approach you already rejected. Your teammate's Cursor has never heard of either. You paste a stale `context.md` around by hand.
+You have an idea in ChatGPT. You research it more in Claude. Then you open Claude Code to build it... and it knows nothing. You copy, paste and re-explain everything, every time.
 
-ContextOS fixes that. You save what matters once: decisions, constraints, dead ends, open questions. Every tool gets a compiled, token-budgeted briefing from it: Claude Code, Codex, Cursor, Gemini CLI, claude.ai, ChatGPT, a local Ollama model, or a human teammate.
+ContextOS fixes that. You tell any AI **"save that"**, and every other AI you use remembers it: ChatGPT, claude.ai, Claude Code, Cursor, Codex. When the research is done, one command hands the whole plan to your coding agent.
 
 ```
-$ ctx save "Use SQLite for the index, not Postgres" -k decision -w "no server to install"
-saved [c:a505] decision -> acme-api/code
-
-$ ctx save "GraphQL gateway" -k rejected -w "schema churn cost more than it saved"
-saved [c:5270] rejected -> acme-api/code
+ ChatGPT            claude.ai            Claude Code
+ "save that"   →    "what do we     →    already knows the plan,
+                     have so far?"        what you decided,
+                                          and what you ruled out
 ```
 
-…and every agent in the repo now starts its session knowing this:
-
-```markdown
-### Decisions
-- Use SQLite for the index, not Postgres [c:a505]
-  - why: no server to install
-
-### Rejected: do not propose these again
-- GraphQL gateway [c:5270]
-  - why: schema churn cost more than it saved
-```
-
-- **Local-first.** A single binary with SQLite built in. No Docker, no Postgres, no account, no cloud required.
-- **Git-synced.** Your memory is a private git repo you own. Syncs across your machines with zero merge conflicts, by design.
-- **No AI in the loop.** Saving and compiling never call a model. Nothing is summarised away, and nothing leaves your machine unless you push it.
-- **Budgeted.** Agents get the *most useful* ~700 tokens, not a 20-page dump. Chat surfaces get more. Humans get everything.
+- **Free.** It runs on your computer. The optional cloud part fits in Cloudflare's free plan.
+- **Private.** Your notes live on your computer and in your own private GitHub repo. There's no ContextOS server and no account.
+- **You stay in control.** Nothing is saved unless you ask, and you can delete anything.
 
 ---
 
 ## Contents
 
-- [Install](#install)
-- [5-minute quickstart](#5-minute-quickstart)
-- [The ideas, in one page](#the-ideas-in-one-page)
-- [Using it every day](#using-it-every-day)
-- [From idea to code](#from-idea-to-code)
-- [Every surface, one memory](#every-surface-one-memory)
-- [Sync across machines](#sync-across-machines)
-- [Command reference](#command-reference)
-- [How it works](#how-it-works)
-- [FAQ](#faq)
-- [Status and roadmap](#status-and-roadmap)
+1. [A 2-minute example: building a notes app](#a-2-minute-example-building-a-notes-app)
+2. [Install](#1-install)
+3. [Use it with Claude Code (local only)](#2-use-it-with-claude-code-local-only)
+4. [Connect ChatGPT and claude.ai (optional, one-time)](#3-connect-chatgpt-and-claudeai-optional-one-time)
+5. [The full flow: idea to working app](#4-the-full-flow-idea-to-working-app)
+6. [What to say to your AI](#what-to-say-to-your-ai)
+7. [Troubleshooting](#troubleshooting)
+8. [FAQ](#faq)
+9. [How it works](#how-it-works)
 
 ---
 
-## Install
+## A 2-minute example: building a notes app
 
-**macOS / Linux**
+Say you want to build a simple notes and to-do app.
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/Percobain/ContextOS/main/install.sh | sh
+**Monday, in ChatGPT**, you brainstorm:
+
+> **You:** I want to build a notes + to-do app called notes-app. Who is it for?
+> **ChatGPT:** … students who want notes and tasks in one place …
+> **You:** Save that as a decision: it's for students. And save as rejected: real-time collaboration, too complex for v1.
+> **ChatGPT:** ✓ Saved to notes-app.
+
+**Wednesday, in claude.ai**, you keep going:
+
+> **You:** What do we have on notes-app?
+> **Claude:** You decided it's for students, and you ruled out real-time collaboration…
+> **You:** Let's decide the features… *(more research)* … ok, **ctx spec**.
+> **Claude:** ✓ Spec saved.
+
+**Friday, on your computer**, you build it:
+
+```
+ctx build notes-app
+cd notes-app
+claude
 ```
 
-**Windows** (PowerShell)
+> **You:** Build this from .ctx/SPEC.md.
 
-```powershell
-irm https://raw.githubusercontent.com/Percobain/ContextOS/main/install.ps1 | iex
-```
+Claude Code already knows the app is for students and that collaboration was ruled out. It won't suggest it again, and you never re-explained anything.
 
-**From source** (any platform with [Rust](https://rustup.rs)):
-
-```sh
-cargo install --git https://github.com/Percobain/ContextOS ctx-cli
-```
-
-Check it worked: `ctx --version`. That's the whole install: one binary called `ctx`.
+That's the whole product. The rest of this page is setup.
 
 ---
 
-## 5-minute quickstart
+## 1. Install
 
-### 1. Wire up a project
+You need **git** and **Rust** (Rust is only needed to build `ctx`; nothing else).
+
+| | Install |
+|---|---|
+| git | [git-scm.com/downloads](https://git-scm.com/downloads) |
+| Rust | [rustup.rs](https://rustup.rs) (on Windows, accept the defaults it suggests) |
+
+Then, in a terminal (PowerShell on Windows, Terminal on macOS/Linux):
 
 ```sh
-cd ~/code/acme-api
+git clone https://github.com/Percobain/ContextOS.git
+cd ContextOS
+cargo install --path crates/ctx-cli --locked
+```
+
+This takes a few minutes the first time. Check it worked:
+
+```sh
+ctx --version
+```
+
+That's it: one program called `ctx`. No Docker, no database, no account.
+
+> Prebuilt downloads (no Rust needed) will come with the first release.
+
+---
+
+## 2. Use it with Claude Code (local only)
+
+Go into any project folder and run:
+
+```sh
+cd my-project
 ctx init
 ```
 
-```
-ContextOS: acme-api/code
-  ✓ .ctx/       config.yaml binds this repo to acme-api/code; commands.md for agents (commit it)
-  ✓ AGENTS.md   ContextOS section added; your own content is kept (commit it)
-  claude-code:
-    ✓ wrote    CLAUDE.md imports AGENTS.md
-    ✓ wrote    Claude Code MCP server (.mcp.json)
-    ✓ wrote    Claude Code SessionStart hook (.claude/settings.local.json)
-```
+This connects the project to ContextOS and sets up Claude Code (and Cursor, Codex or Gemini CLI if you have them). **Restart Claude Code** in that folder, and it's ready.
 
-`ctx init` detects which agents you have installed (Claude Code, Codex, Cursor, Gemini CLI) and wires each one in. It is safe to run twice. It only adds its own entries, never touches your other config, and refuses to merge into an existing hooks file.
+From now on, just talk to Claude Code:
 
-### 2. Save what you know
+> Save that as a decision: we use SQLite, not Postgres, because there's no server to run.
 
-```sh
-ctx save "Never call the payments API synchronously from a request handler" \
-    -k constraint -w "p99 latency budget is 200ms" -r src/payments.rs
+> What did we decide about the database?
 
-ctx save "Use SQLite for the index, not Postgres" -k decision -w "no server to install"
+> Give me a handoff doc for a new teammate.
 
-ctx save "GraphQL gateway" -k rejected -w "schema churn cost more than it saved"
-```
+> Show me a map of this project.
 
-`-k` is the kind, `-w` is *why*, `-r` points at files, docs or URLs. Saving is instant and offline.
+Claude Code runs the right `ctx` commands itself; you don't need to learn them. (If you're curious: `ctx commands` lists them all.)
 
-### 3. See what your agents see
-
-```sh
-ctx pack
-```
-
-```markdown
-## Project context: acme-api/code
-
-Compiled by ContextOS. These are settled; build on them.
-
-### Constraints
-
-- Never call the payments API synchronously from a request handler (`src/payments.rs`) [c:cece]
-  - why: p99 latency budget is 200ms
-
-### Decisions
-
-- Use SQLite for the index, not Postgres [c:a505]
-  - why: no server to install
-
-### Rejected: do not propose these again
-
-- GraphQL gateway [c:5270]
-  - why: schema churn cost more than it saved
-
-### Working with ctx
-Active branch: acme-api/code. The context above is compiled; don't re-derive it.
-Save only when I explicitly say so, plus one batched call at session end.
-Use ctx_append(kind, text, why, refs). Don't log progress or summaries.
-Cross-branch material: ctx_propose(target_branch, ...).
-<!-- ctx/1 b=acme-api/code n=3 t=219/700 root=b3:470c56f5 gen=01M2SRHF v=0.1.0 -->
-```
-
-This same section now lives in your repo's `AGENTS.md`, which Claude Code, Codex, Cursor, Gemini CLI and 30+ other tools read automatically. It refreshes every time you `ctx save`.
-
-### 4. Open your agent and work
-
-Start Claude Code (or Codex, or Cursor) in the repo. It already knows the constraints, the decisions, and what not to suggest again. When something worth keeping comes up, tell it:
-
-> "Save that as a decision: we retry webhooks with exponential backoff, because Stripe retries for 3 days anyway."
-
-It calls `ctx_append`, and the claim is in the shared memory for every other tool.
-
-**That's it.** The rest of this README covers doing more with it.
+**This works on its own with no cloud and no internet.** Steps 3 and 4 only matter if you want ChatGPT and claude.ai to share the same memory.
 
 ---
 
-## The ideas, in one page
+## 3. Connect ChatGPT and claude.ai (optional, one-time)
 
-### Claims: six kinds, and that's all
+ChatGPT and claude.ai can't reach your computer, so they need a small "mailbox" in the cloud. You'll set up two free things, both owned by you:
 
-Everything in ContextOS is a **claim**: a short statement plus an optional *why*.
+- a **private GitHub repo**, where your memory is stored and synced;
+- a **Cloudflare Worker**, the mailbox that ChatGPT and Claude talk to.
 
-| Kind | Use it for | Example |
-|---|---|---|
-| `decision` | Something you chose | "Use SQLite for the index" |
-| `constraint` | A hard limit that must hold | "p99 must stay under 200ms" |
-| `rejected` | An approach you ruled out, and why | "GraphQL gateway: schema churn" |
-| `fact` | Something true about the world | "Stripe retries webhooks for 3 days" |
-| `question` | Something still open | "Do we need a Python SDK?" |
-| `claim` | A belief or bet, not yet proven | "Webhooks beat polling for our users" |
+It takes about 15 minutes. You'll need a free [GitHub](https://github.com) account, a free [Cloudflare](https://dash.cloudflare.com/sign-up) account, and [Node.js](https://nodejs.org) 18 or newer.
 
-**`rejected` and `constraint` are the most valuable kinds.** They hold the knowledge nobody writes down, the kind that makes a model (or a new teammate) suggest the thing you already tried.
+### Step 3.1: store your memory in a private GitHub repo
 
-**Nothing is ever deleted.** Changing your mind means saving a new claim that *supersedes* the old one. The history stays, and handoffs show it ("Previously: use Postgres").
+1. On GitHub, create a **new, empty, private** repository called `ctx-store`. Don't add a README.
+2. Connect your memory to it (replace `YOU` with your GitHub username).
 
-### Branches: separate contexts that share conclusions
+   macOS / Linux:
 
-A project has **branches**, like `research` and `code`. They are not git branches: you work in all of them at once.
+   ```sh
+   git -C ~/ctx remote add origin https://github.com/YOU/ctx-store.git
+   ctx sync
+   ```
 
-```mermaid
-graph LR
-  R["acme-api/research<br/>facts · questions · claims · decisions"] -- "decisions & constraints only" --> C["acme-api/code<br/>decisions · constraints · rejected"]
-```
+   Windows (PowerShell):
 
-- `research` is where you think: facts, open questions, bets.
-- `code` is what your coding agents see. It **inherits only the conclusions** from research (decisions and constraints), not forty open questions. That keeps agent context small and sharp.
-- Each branch only accepts certain kinds. `ctx save "..." -k claim` inside a code repo is refused with a hint: `try --to acme-api/research`.
+   ```powershell
+   git -C "$HOME\ctx" remote add origin https://github.com/YOU/ctx-store.git
+   ctx sync
+   ```
 
-`ctx init` creates `research` and `code` for you. Add more with templates: `ctx branch new gtm --parent research --template gtm` (templates: `research`, `code`, `gtm`, `writing`).
+   (If `~/ctx` doesn't exist yet, run `ctx status` once; it creates it.)
 
-### Packs: compiled, budgeted, deterministic
+`ctx sync` should end with `synced with https://github.com/YOU/ctx-store.git`.
 
-A **pack** is a branch compiled for one reader, under a token budget:
+### Step 3.2: create a GitHub token for the mailbox
 
-| Shape | For | Default budget |
-|---|---|---|
-| `agents-md` | coding agents (`AGENTS.md`) | 700 tokens |
-| `dossier` | claude.ai / ChatGPT / any chat | 4,000 tokens |
-| `handoff` | a human teammate | unlimited |
-| `markdown` | piping into anything (`ctx pack \| ollama run qwen3`) | 1,500 tokens |
+The mailbox needs permission to read and write **only** that one repo.
 
-The compiler picks the most useful claims for the budget. It favours constraints and decisions, recent and highly rated claims, and coverage across topics, and it skips near-duplicates. It drops the *why* before it drops a claim. The same inputs always produce byte-identical output, and the footer (`root=b3:…`) identifies exactly which claims went in.
+1. Open [github.com/settings/personal-access-tokens/new](https://github.com/settings/personal-access-tokens/new) (a **fine-grained** token).
+2. **Token name:** `contextos-worker` (any name works).
+3. **Expiration:** 1 year is a good choice.
+4. **Repository access:** *Only select repositories*, then pick `ctx-store`.
+5. **Permissions**, then *Repository permissions*, then **Contents: Read and write**. GitHub adds *Metadata: Read-only* automatically; that's expected.
+6. Click **Generate token** and **copy** it (it starts with `github_pat_`). Keep this page open.
 
----
+### Step 3.3: put the mailbox on Cloudflare
 
-## Using it every day
-
-| I want to… | Run |
-|---|---|
-| Record a decision | `ctx save "..." -k decision -w "why"` |
-| Record something for research while in a code repo | `ctx save "..." -k fact --to research` |
-| Change my mind about a decision | `ctx save "new decision" -k decision --supersedes c:a505` |
-| Delete a claim, or a whole idea | `ctx delete c:a505` / `ctx delete notes-app` |
-| Find something | `ctx search webhooks retry` |
-| See the full context for a task | `ctx pack --task "add refund endpoint"` |
-| Write a handoff doc | `ctx pack --for handoff > HANDOFF.md` |
-| See everything recorded | `ctx log -v` |
-| Review what agents proposed for other branches | `ctx review` → `ctx review accept c:866c` |
-| Mark a claim as useful (or misleading) | `ctx rate c:a505 up` / `down` |
-| Find near-duplicates to clean up | `ctx refine` |
-| Check that everything is wired correctly | `ctx doctor` |
-
-Anything that takes an id accepts the short `c:xxxx` tag shown in packs and logs.
-
-**What should I save?** Save what would be expensive to rediscover: why you chose X over Y, what you tried that failed, limits you must respect, and questions that are still open. **Don't** save progress notes ("implemented the handler") or summaries. That's what git history is for. The agent operating rules say the same, so agents only save when you ask.
-
----
-
-## From idea to code
-
-The flow ContextOS is built around: you have an idea in ChatGPT or claude.ai, research it there, end with a spec, and hand it to a coding agent, without ever copying context between tools.
+In a terminal, from the `ContextOS` folder you cloned:
 
 ```sh
-ctx new habit-tracker
+cd worker
+npm install
+npx wrangler login
 ```
 
-That creates the project and points your chat tools at its research branch. Now research in claude.ai or ChatGPT (with the [connector](worker/README.md), the [extension](extension/README.md), or the clipboard). Say **"save that"** whenever something is worth keeping. When the research is done, say **"ctx spec"**, and the chat writes the full spec and saves it to the project.
+A browser window opens. Log in to Cloudflare and click **Allow**.
+
+**Deploy the mailbox** (replace `YOU` with your GitHub username):
+
+```sh
+npx wrangler deploy --var GITHUB_REPO:YOU/ctx-store
+```
+
+It prints an address like `https://contextos.yourname.workers.dev`. Note it down.
+
+**Give the mailbox your GitHub token.** Run this, and when it asks *"Enter a secret value"*, paste the token from step 3.2 and press Enter:
+
+```sh
+npx wrangler secret put GITHUB_TOKEN
+```
+
+> ⚠️ Type `GITHUB_TOKEN` exactly as shown: that's the *name*. Paste the token only when it asks for the value. (Putting the token where the name goes is the most common setup mistake.)
+>
+> On Windows you can skip the paste entirely: copy the token, then run
+> `Get-Clipboard | npx wrangler secret put GITHUB_TOKEN`
+
+**Make a private password for the mailbox's address.** This prints a random code:
+
+```sh
+node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
+```
+
+Copy it, then run this and paste it when asked:
+
+```sh
+npx wrangler secret put CTX_SECRET
+```
+
+Secrets take effect immediately; no need to deploy again.
+
+Your **connector URL** is the address from the deploy step, plus `/mcp/`, plus the code:
+
+```
+https://contextos.yourname.workers.dev/mcp/<the code>
+```
+
+> 🔑 **This URL works like a password.** Anyone with it can read and write your memory. Keep it somewhere safe and don't share screenshots of it.
+
+### Step 3.4: add it to claude.ai
+
+1. In claude.ai, open **Settings → Connectors** and choose **Add custom connector**.
+2. **Name:** `ContextOS`. **URL:** your connector URL.
+3. Save. Optionally set the tools to **Always allow** so it doesn't ask every time.
+
+To use it, start a new chat, click the **tools icon** in the message box, and make sure **ContextOS** is switched on.
+
+### Step 3.5: add it to ChatGPT
+
+ChatGPT calls this *Developer mode*. It may require a paid ChatGPT plan.
+
+1. Open **Settings → Security** and turn on **Developer mode**. The "unverified connectors" warning is ChatGPT's standard message for any connector it hasn't reviewed; this one is your own.
+2. Open **Settings → Apps & Connectors** and choose **Create** (or *Add custom connector*).
+3. **Name:** `ContextOS`. **MCP server URL:** your connector URL. **Authentication:** *No authentication* (the password is already in the URL).
+4. Save.
+
+To use it, in a chat click **+**, then **More**, then **ContextOS**.
+
+### Step 3.6: check it works
+
+In ChatGPT or claude.ai, with ContextOS on:
+
+> Use ContextOS: which ideas do I have?
+
+It should list your ideas. If it doesn't, see [Troubleshooting](#troubleshooting).
+
+**Cost:** Cloudflare's free plan allows 100,000 requests a day and **never charges you**: if you ever went over, requests would just fail until the next day. The mailbox also limits itself to about 89,000 a day to stay safely under that.
+
+---
+
+## 4. The full flow: idea to working app
+
+Once steps 1 to 3 are done, this is all you ever do.
+
+### Have an idea (in ChatGPT or claude.ai)
+
+Name your idea when you save the first thing:
+
+> Save this as a new idea called **habit-tracker**: an app that helps people keep daily habits.
+
+### Research it (in either chat, switch whenever you like)
+
+> What do we have on habit-tracker?
+> Save that as a decision: streaks reset at midnight in the user's time zone.
+> Save as rejected: social leaderboards, because they made people quit in our interviews.
+> Save the open question: do we need an Apple Watch app?
+
+### Write the plan
+
+When the research feels done:
+
+> **ctx spec**
+
+The AI writes a complete spec (features, screens, data, tech) and saves it to the idea.
+
+### Build it (on your computer)
 
 ```sh
 ctx build habit-tracker
-cd habit-tracker && claude
+cd habit-tracker
+claude
 ```
 
-`ctx build` pulls the latest research, creates the repo, and writes `.ctx/SPEC.md` (the spec), `AGENTS.md` (the decisions, constraints and rejected ideas from research) and your agent's configuration. Tell the agent "Build this from .ctx/SPEC.md". If you later refine the spec in the chat, the next session updates `.ctx/SPEC.md` and tells the agent to re-read it (it never overwrites your own edits).
+> Build this from .ctx/SPEC.md.
 
-See the whole project at a glance with `ctx map > MAP.md`, a "metro map" where each branch is a line and each claim a station, coloured by kind. It renders directly on GitHub:
+`ctx build` fetches your latest chat research and creates a project folder with:
 
-```mermaid
-flowchart LR
-  subgraph b1["habit-tracker/research"]
-    direction LR
-    n0["fact: Users quit habit apps after ~2 weeks"]:::fact --- n1["decision: Offline-first, sync later"]:::decision --- n2["rejected: Gamified leaderboards"]:::rejected
-  end
-  subgraph b0["habit-tracker/code"]
-    direction LR
-    n3["constraint: Works with no network"]:::constraint
-  end
-  b1 -. "decision, constraint, rejected" .-> b0
-  classDef decision fill:#dbeafe,stroke:#1d4ed8,color:#0b1b3a
-  classDef constraint fill:#ffedd5,stroke:#c2410c,color:#3a1a05
-  classDef rejected fill:#fee2e2,stroke:#b91c1c,color:#3a0b0b
-  classDef fact fill:#f1f5f9,stroke:#475569,color:#0f172a
-```
-
----
-
-## Every surface, one memory
-
-### Coding agents (Claude Code, Codex, Cursor, Gemini CLI)
-
-`ctx init` gives each agent:
-
-1. **`AGENTS.md`**: the compiled pack on disk. It works with no install at all, so a teammate who has never heard of ContextOS still gets it, and it keeps working even if a hook breaks.
-2. **An MCP server** (`ctx mcp`) with exactly five tools: `ctx_index`, `ctx_pack`, `ctx_search`, `ctx_append`, `ctx_propose`. Five small schemas keep the per-turn context tax low.
-3. **A SessionStart hook** (Claude Code): pulls the latest claims and refreshes `AGENTS.md` when a session starts. It never injects on every prompt, because that would break prompt caching.
-
-### claude.ai and ChatGPT: the Cloudflare Worker (no extension needed)
-
-A small, stateless MCP server that you deploy once to your own Cloudflare account (free tier). You add it as a **custom connector**, and claude.ai and ChatGPT get the same five tools, reading and writing your private memory repo. Research you do on claude.ai at 11pm shows up in your laptop's next session.
-
-→ Setup guide: [`worker/README.md`](worker/README.md) (about 10 minutes).
-
-### Any chat, no setup: the clipboard
-
-```sh
-ctx pack research --clip        # copy a dossier, paste it into any chat
-```
-
-Every dossier ends with an instruction to the model. When you say **"ctx save"**, it replies with a fenced `ctx-claims` block. Copy that reply, then:
-
-```sh
-ctx save --paste --to research  # reads the block from your clipboard
-```
-
-This works with any chat UI: Gemini, Perplexity, DeepSeek, a local web UI.
-
-### Browser extension (optional convenience)
-
-A Chrome extension that inserts context into the chat box (**Alt+Shift+C**) and adds a **Save to ctx** button under `ctx-claims` blocks. It talks to `ctx daemon`, a local API on `127.0.0.1:7777` that is loopback-only and token-protected.
-
-→ Setup: [`extension/README.md`](extension/README.md).
-
-### Local models and scripts
-
-```sh
-ctx pack | ollama run qwen3
-ctx pack --for markdown --task "design the refund flow" > context.md
-```
-
-### Humans
-
-```sh
-ctx pack --for handoff > HANDOFF.md
-```
-
-This gives a teammate where things stand and why, what was tried and rejected, the constraints to respect, open questions, what changed along the way, and which files to read first.
-
----
-
-## Sync across machines
-
-Your memory lives in `~/ctx` (`%USERPROFILE%\ctx` on Windows) and is a git repo. To sync it, point it at a **private** repo:
-
-```sh
-git -C ~/ctx remote add origin git@github.com:you/ctx-store.git
-ctx sync
-```
-
-After that:
-- `ctx sync` commits, pulls and pushes. It also refreshes the compiled packs the Worker serves.
-- Claude Code sessions pull at startup (via the hook), and the MCP server commits and pushes 30 seconds after an agent saves.
-- **Conflicts can't happen.** Each machine writes only to its own file (`log/<machine>/2026-09.jsonl`), so two laptops saving at the same time just touch different files.
-
-With no remote, everything still works locally. Offline is a normal state.
-
----
-
-## Command reference
-
-| Command | What it does |
+| File | What's in it |
 |---|---|
-| `ctx new <idea>` | Start an idea: creates its research and code branches and points chat tools at research |
-| `ctx build <idea>` | Hand an idea to a coding agent: new repo with `.ctx/SPEC.md`, `AGENTS.md` and agent configs |
-| `ctx spec save\|show\|ls` | Save a spec from a file, stdin or `--paste`; print or list documents |
-| `ctx map [project]` | Draw the project as a Mermaid metro map (`--out MAP.md`) |
-| `ctx init` | Wire the current repo: `.ctx/`, `AGENTS.md`, agent configs. Idempotent. |
-| `ctx commands` | Every command by task (the same list agents read from `.ctx/commands.md`) |
-| `ctx save "<text>"` | Record a claim. `-k kind`, `-w why`, `-r refs`, `-t tags`, `--to branch`, `--supersedes id`, `--paste` |
-| `ctx pack [branch]` | Compile context. `--task`, `--budget`, `--for agents-md\|dossier\|handoff\|markdown`, `--clip`, `--out FILE` |
-| `ctx search <query>` | Full-text search (stemmed). `-b branch`, `-k kind`, `-v` |
-| `ctx log` | Everything recorded, oldest first. `--since 2026-09-01`, `-k`, `-v` |
-| `ctx show <id>` | One claim in full, with its status history |
-| `ctx status` | Store, remote, current branch, counts, pending reviews |
-| `ctx use <branch>` | Default branch outside a repo (for chat surfaces) |
-| `ctx branch new\|ls\|merge\|archive` | Manage branches |
-| `ctx review [accept\|reject]` | Handle claims agents proposed for other branches |
-| `ctx delete <c:xxxx \| idea \| idea/branch>` | Delete a claim, a branch or a whole idea (alias `ctx remove`). Gone everywhere (syncs to your chats right away; `--cloud` fails if it can't), kept in history; asks before deleting more than one claim |
-| `ctx rate <id> up\|down` | Feedback that affects ranking |
-| `ctx refine` | Find near-duplicates worth merging |
-| `ctx sync` | Commit, pull, push |
-| `ctx verify [root]` | Compare a pack's root with this machine: in-sync / behind / ahead-or-diverged |
-| `ctx eval` | Score packs against known Q&A (optionally with a local Ollama model) |
-| `ctx doctor` | Diagnose wiring, git, daemon. Each problem comes with its fix. |
-| `ctx reindex` | Rebuild the search index from the log (safe any time) |
-| `ctx daemon` / `ctx daemon token` | Local API for the browser extension |
-| `ctx mcp` | MCP server over stdio (agents launch this) |
+| `.ctx/SPEC.md` | the spec from your chat |
+| `AGENTS.md` | your decisions, rules, and "rejected: do not suggest again" |
+| `.ctx/commands.md` | instructions so the coding agent can use ContextOS for you |
 
-`ctx <command> --help` shows every flag.
+Already created the folder? Give its path: `ctx build habit-tracker D:\repos\my-folder`.
+
+### Keep going
+
+- Change the plan in a chat later and say **ctx spec** again. The next time you open Claude Code, it updates `.ctx/SPEC.md` and re-reads it.
+- Decisions you make while coding ("save that…") go into the idea's **code** section. Your chats can read them too: ask "what do we have on habit-tracker/code?".
 
 ---
 
-## How it works
+## What to say to your AI
 
+You never need to learn commands. Say these in ChatGPT, claude.ai or Claude Code:
+
+| You say | What happens | Where |
+|---|---|---|
+| "Save this as a new idea called X" | starts idea X | chats, Claude Code |
+| "Save that" / "save that as a decision" | remembers it | chats, Claude Code |
+| "Save as rejected: …, because …" | remembers what *not* to do, and why | chats, Claude Code |
+| "Save the open question: …" | remembers it for later | chats, Claude Code |
+| "What do we have on X?" | reads back everything about idea X | chats, Claude Code |
+| "ctx spec" | writes and saves the full plan | chats |
+| "We changed our mind about …" | replaces the old decision (history is kept) | Claude Code (in a chat, just save the new decision) |
+| "Give me a handoff doc" | a document a teammate can start from | Claude Code |
+| "Show me a map of the project" | a diagram of everything decided | Claude Code |
+| "Delete the X idea" | removes it everywhere (it asks first) | Claude Code |
+
+"Chats" means ChatGPT and claude.ai with the ContextOS connector turned on. Claude Code can do everything, because it can run `ctx` itself.
+
+**The AI only saves when you ask.** It never fills your memory with chatter.
+
+### Terminal commands (if you like them)
+
+You only really need three:
+
+```sh
+ctx build <idea>     # turn an idea into a project folder for your coding agent
+ctx init             # connect an existing project folder
+ctx sync             # sync with your chats and your other computers
 ```
- log/<machine>/*.jsonl        append-only, one writer per file, synced by git   ← the only source of truth
-        │
-        ▼
- .cache/ctx.db                SQLite + full-text index; disposable (ctx reindex rebuilds it in ~1s)
-        │
-        ▼
- branch DAG                   refs/branches.yaml: which claims each branch can see
-        │
-        ▼
- compiler                     picks the best claims under a token budget (pure, deterministic)
-        │
-        ▼
- AGENTS.md · MCP · Worker · clipboard · stdout · handoff
-```
 
-- **Claims are content-addressed.** Each claim's id (`b3:…`) is the BLAKE3 hash of its normalised content, so the same claim saved twice is stored once, on every OS. The canonical form is specified in [`docs/canonical.md`](docs/canonical.md) and checked against an independent Python implementation in CI.
-- **The compiler** treats packing as budgeted submodular maximisation (relevance + topic coverage − redundancy) solved with lazy greedy. It packs claim text first, then spends leftover budget on the *why*. It uses ideas from [ACE](https://arxiv.org/abs/2510.04618) (itemised context with incremental updates, which avoids "context collapse") and [GCC](https://arxiv.org/abs/2508.00031) (versioned, branchable context).
-- **Wire formats** (log records, daemon API, `ctx-claims` block, Worker) are specified in [`docs/protocol.md`](docs/protocol.md).
+Everything else: `ctx commands` lists every command by what you want to do. `ctx doctor` checks your setup and tells you how to fix anything wrong.
 
-Rules the codebase never breaks: the log is the only truth, claims are immutable, one writer per file, no model call when saving or merging, branch routing is declared (never guessed by a model), no base64 in anything a model reads, nothing is deleted, and nothing depends on hooks firing.
+---
+
+## Troubleshooting
+
+**Start here:** `ctx doctor` checks everything and gives a fix for each problem.
+
+| Problem | Fix |
+|---|---|
+| ChatGPT or Claude saved into the wrong idea | Name the idea when you save: "save this **to habit-tracker**". To move a note, ask your coding agent, or delete it with `ctx delete c:xxxx` and save it again. |
+| The chat printed the spec instead of saving it | Say: "save that spec to ContextOS with the doc field". Or copy the spec block and run `ctx spec save --paste --to <idea>/research`. |
+| The connector says "GITHUB_TOKEN secret is not set" | The token was saved under the wrong name. Run `npx wrangler secret put GITHUB_TOKEN` in the `worker` folder and paste the token when asked. |
+| The connector says "Bad credentials" | The GitHub token expired or was deleted. Make a new one (step 3.2) and run the command above again. |
+| ChatGPT behaves as if it has old instructions | ChatGPT caches the tool list. Open *Settings → Apps & Connectors → ContextOS* and refresh it, or remove and re-add the connector. |
+| Claude Code doesn't seem to know the project | Run `ctx init` in the folder and restart Claude Code. |
+| `ctx build` says there's no spec | Say **ctx spec** in your chat first, then run `ctx build` again. |
+| Something I deleted still shows in a chat | Run `ctx sync` (deletes sync automatically when you're online). |
 
 ---
 
 ## FAQ
 
-**Does my data leave my machine?**
-No, unless you push `~/ctx` to a remote you choose, or deploy the Worker to your own Cloudflare account. There's no ContextOS service and no telemetry.
+**Is my data sent anywhere?**
+Only to places you set up: your own private GitHub repo and your own Cloudflare Worker. There's no ContextOS company server and no tracking.
 
-**Does it use an LLM to summarise my chats?**
-No. Nothing is scraped or auto-extracted. You decide what's worth keeping, and saving never calls a model. That's deliberate: auto-extracted "memories" turn into noise fast.
+**Does it use AI to decide what to remember?**
+No. It saves exactly what you ask it to, word for word. It never reads your chats on its own.
 
-**What does it cost in tokens?**
-For a coding agent: about 700 tokens of context once per session (cached by the provider), plus about 300 tokens of tool schemas per turn.
+**Does it cost anything?**
+No. Everything runs on your computer, GitHub's free tier and Cloudflare's free tier.
 
-**Why not a vector database?**
-At a few thousand curated claims, SQLite full-text search with stemming is fast and good enough. It also keeps the install to a single binary.
+**Do I need the cloud part?**
+Only to share memory with ChatGPT and claude.ai. With just Claude Code (or Cursor, Codex, Gemini CLI), step 2 is enough.
 
-**Do I need Docker / Node / Python?**
-No. `ctx` is one binary. Node is only needed if you deploy the optional Cloudflare Worker.
+**Can I use it on two computers?**
+Yes. Install `ctx` on both and point both at the same `ctx-store` repo (step 3.1). They sync without conflicts.
 
-**What if I delete `.cache/`?**
-Nothing is lost. It's a cache; the next command rebuilds it from the log.
+**What if I delete something by mistake?**
+Deleted things disappear from your AIs but stay in the history, so nothing is truly lost.
 
-**My repo already has an `AGENTS.md` / `CLAUDE.md` / MCP config.**
-ContextOS only manages the section between its `<!-- ctx:begin -->` / `<!-- ctx:end -->` markers, adds one import line to `CLAUDE.md`, and adds its own `ctx` entry to MCP configs. Your content is kept.
-
-**Can my team share one memory?**
-Yes. Share the `~/ctx` git repo. Each person's machine writes its own file, so there are still no conflicts. Teammates without ContextOS still get the committed `AGENTS.md`.
+**Which AI tools does it work with?**
+ChatGPT and claude.ai (through the connector); Claude Code, Codex, Cursor and Gemini CLI (through `ctx init`); anything else by copy and paste (`ctx pack --clip`). A browser extension for other chat sites is in [`extension/`](extension/README.md).
 
 ---
 
-## Status and roadmap
+## How it works
 
-ContextOS is new (v0.1). Everything above is implemented and covered by tests; CI runs the full suite on Windows, macOS and Linux.
+For the curious (and for developers):
 
-Known limitations:
-- Compiling a pack over **10,000 claims** takes ~17ms (target: 15ms). Typical packs, which are narrowed to a task, take under 1ms.
-- The browser extension targets Chrome and has not been through extensive real-world UI testing.
-- Search is keyword-based. Semantic (embedding) search is planned, behind an opt-in flag.
-- Packer weights are initial guesses. `ctx eval` exists to tune them against real projects, and feedback is very welcome.
-
-## Contributing
-
-```sh
-cargo test --workspace          # Rust: ~90 tests, incl. golden hashes and packer properties
-cd worker && npm ci && npm test # Cloudflare Worker
+```
+ ChatGPT / claude.ai ──► your Cloudflare Worker ──► your private GitHub repo ◄──► ctx on your computers
+                                                                                      │
+                                                         Claude Code, Codex, Cursor ◄─┘ (AGENTS.md + tools)
 ```
 
-| Path | What |
+- Every note is a small **claim** (a decision, fact, rule, rejected idea, open question or belief), stored in plain text files that are only ever added to, never edited. That's why syncing never conflicts and nothing is lost.
+- Each idea has a **research** section (everything you explored) and a **code** section (only the conclusions a builder needs), so your coding agent gets a short, focused briefing instead of every brainstorm.
+- Briefings are **size-limited**: the coding agent gets the most useful ~700 tokens, chats get a fuller version, and handoff docs get everything.
+
+Technical details:
+- [`docs/protocol.md`](docs/protocol.md): every file format, rule and design decision, and why.
+- [`docs/canonical.md`](docs/canonical.md): how notes are fingerprinted so they match across machines.
+- [`worker/README.md`](worker/README.md): more detail on the Cloudflare Worker.
+
+### For developers
+
+```sh
+cargo test --workspace            # Rust (the ctx program)
+cd worker && npm ci && npm test   # the Cloudflare Worker
+```
+
+| Folder | What |
 |---|---|
-| `crates/ctx-core` | claim model, canonical form, content addressing, Merkle roots |
-| `crates/ctx-store-sqlite` | the SQLite index (the only crate with SQL) |
-| `crates/ctx-branch` | branch DAG, inheritance, `.ctx/config.yaml` |
-| `crates/ctx-pack` | the compiler and renderers (pure) |
-| `crates/ctx-git` | sharded log, git sync |
-| `crates/ctx-app` | operations shared by CLI, MCP and daemon |
-| `crates/ctx-mcp`, `ctx-daemon`, `ctx-wire`, `ctx-cli` | the surfaces |
-| `worker/`, `extension/` | Cloudflare Worker, Chrome extension |
+| `crates/ctx-cli` | the `ctx` program |
+| `crates/ctx-app` | the operations every surface shares |
+| `crates/ctx-core`, `ctx-store-sqlite`, `ctx-git`, `ctx-branch`, `ctx-pack` | storage, sync, branches, the briefing compiler |
+| `crates/ctx-mcp`, `ctx-daemon`, `ctx-wire` | the AI tool connections |
+| `worker/` | the Cloudflare Worker (ChatGPT / claude.ai) |
+| `extension/` | the browser extension |
+
+---
 
 ## License
 
