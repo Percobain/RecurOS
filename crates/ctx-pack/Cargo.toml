@@ -1,0 +1,15 @@
+[package]
+name = "ctx-pack"
+description = "The ContextOS compiler: budgeted submodular packing and renderers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ctx-core.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+ulid.workspace = true
