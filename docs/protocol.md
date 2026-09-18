@@ -283,6 +283,12 @@ that ends a research phase.
 The **current version** of a document is the record with the greatest `id`
 for its `(branch, name)` pair. Older versions stay in the log.
 
+A document version is hidden by a `status` record with `to: "archived"`
+whose `claim` field holds the document version's id (the field name is
+historical; it holds any record id). Readers ignore archived versions when
+choosing the current one, so removing a document archives all of its
+versions, otherwise an older version would silently become current again.
+
 Writers must not write a new version whose `cid` equals the current
 version's `cid`: saving an unchanged spec is a no-op.
 
@@ -499,6 +505,23 @@ always right.
   The originals stay active where they were written, which keeps merges
   reversible and auditable, and they sync like any other write. Merging
   twice copies nothing new.
+- **Remove (delete).** `ctx remove` and its alias `ctx delete` take a
+  short tag (`c:7f2a`, one claim), a branch (`idea/branch`) or an idea name
+  (every branch of that project). They append `archived` status records for
+  every visible claim and every document version involved, mark the
+  branches archived, and reset `refs/active` if it pointed at a removed
+  branch. Removing more than one claim asks for confirmation, and refuses
+  without `--yes` when it cannot ask. Everything disappears from packs,
+  search, indexes, `AGENTS.md` and the chat connectors, and `ctx log` hides
+  it unless given `--all`.
+
+  *Why nothing is erased:* removal has to reach every machine and the
+  Worker through the same append-only sync as everything else. Physically
+  deleting lines would rewrite files that other machines own and break the
+  one-writer rule, and a deleted record could come back from any machine
+  that still had it. A status record converges everywhere. The records do
+  remain in the git history; removing a secret saved by mistake requires
+  rewriting that history, which is a deliberate manual step.
 - **Archive.** `ctx branch archive` appends an `archived` status record for
   each claim on the branch and marks it archived in `branches.yaml`. Nothing
   is deleted.

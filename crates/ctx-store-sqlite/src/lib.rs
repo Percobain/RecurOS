@@ -356,6 +356,11 @@ fn to_doc((id, branch, name, title, body, cid, src, t): DocRow) -> Option<Doc> {
 
 const DOC_COLS: &str = "id, branch, name, title, body, cid, src, t_tx";
 
+/// Documents are hidden by a status record that targets their id, the same
+/// way claims are archived: nothing is ever erased from the log.
+const DOC_VISIBLE: &str =
+    "id NOT IN (SELECT claim FROM status_changes WHERE to_status = 'archived')";
+
 fn insert_counter(tx: &Transaction, u: &CounterUpdate) -> Result<(), SqliteError> {
     // G-counter merge: per-machine max, independently for each field.
     tx.prepare_cached(
@@ -652,7 +657,8 @@ impl Store for SqliteStore {
     fn docs(&self, branch: Option<&BranchRef>) -> Result<Vec<Doc>, SqliteError> {
         let sql = format!(
             "SELECT {DOC_COLS} FROM docs d
-             WHERE id = (SELECT max(id) FROM docs WHERE branch = d.branch AND name = d.name)
+             WHERE id = (SELECT max(id) FROM docs WHERE branch = d.branch AND name = d.name
+                         AND {DOC_VISIBLE})
                AND (?1 IS NULL OR branch = ?1)
              ORDER BY branch, name"
         );
@@ -665,13 +671,24 @@ impl Store for SqliteStore {
 
     fn doc(&self, branch: &BranchRef, name: &str) -> Result<Option<Doc>, SqliteError> {
         let sql = format!(
-            "SELECT {DOC_COLS} FROM docs WHERE branch = ?1 AND name = ?2 ORDER BY id DESC LIMIT 1"
+            "SELECT {DOC_COLS} FROM docs WHERE branch = ?1 AND name = ?2 AND {DOC_VISIBLE}
+             ORDER BY id DESC LIMIT 1"
         );
         Ok(self
             .conn
             .query_row(&sql, params![branch.as_str(), name], row_to_doc)
             .optional()?
             .and_then(to_doc))
+    }
+
+    fn doc_versions(&self, branch: &BranchRef) -> Result<Vec<Doc>, SqliteError> {
+        let sql =
+            format!("SELECT {DOC_COLS} FROM docs WHERE branch = ?1 AND {DOC_VISIBLE} ORDER BY id");
+        let mut stmt = self.conn.prepare_cached(&sql)?;
+        let rows = stmt
+            .query_map([branch.as_str()], row_to_doc)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows.into_iter().filter_map(to_doc).collect())
     }
 
     fn rebuild(&mut self) -> Result<(), SqliteError> {

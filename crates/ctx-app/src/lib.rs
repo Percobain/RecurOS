@@ -335,10 +335,22 @@ impl App {
         reason: Option<String>,
         src: &str,
     ) -> Result<()> {
+        self.status_record(claim.id, to, reason, src)
+    }
+
+    /// Append a status record for any record id (a claim, or a document
+    /// version: archiving a document hides it the same way).
+    fn status_record(
+        &mut self,
+        target: Ulid,
+        to: Status,
+        reason: Option<String>,
+        src: &str,
+    ) -> Result<()> {
         let (sys, at) = now();
         let rec = StatusChange {
             id: Ulid::from_datetime(sys),
-            claim: claim.id,
+            claim: target,
             to,
             reason,
             src: src.to_owned(),
@@ -508,6 +520,75 @@ impl App {
             self.save_branches()?;
         }
         Ok(n)
+    }
+
+    /// Branches belonging to `project`: defined in branches.yaml or holding
+    /// any claim or document.
+    pub fn project_branches(&self, project: &str) -> Result<Vec<BranchRef>> {
+        let prefix = format!("{project}/");
+        let mut names: BTreeSet<String> = self
+            .branches
+            .all()
+            .into_iter()
+            .map(String::from)
+            .filter(|b| b.starts_with(&prefix))
+            .collect();
+        for s in self.store.branches()? {
+            if s.branch.starts_with(&prefix) {
+                names.insert(s.branch);
+            }
+        }
+        for d in self.store.docs(None)? {
+            if d.branch.as_str().starts_with(&prefix) {
+                names.insert(d.branch.to_string());
+            }
+        }
+        names.iter().map(|n| Ok(BranchRef::new(n)?)).collect()
+    }
+
+    /// What removing a branch would hide: (visible claims, document versions).
+    pub fn removal_counts(&self, branch: &BranchRef) -> Result<(usize, usize)> {
+        let claims = self
+            .store
+            .scan(&Filter {
+                branch: Some(branch.clone()),
+                ..Default::default()
+            })?
+            .into_iter()
+            .filter(|c| c.status != Status::Archived)
+            .count();
+        Ok((claims, self.store.doc_versions(branch)?.len()))
+    }
+
+    /// `ctx remove <branch>`: hide every claim and document on a branch and
+    /// mark it archived. Nothing is erased; it all stays in the log.
+    pub fn remove_branch(&mut self, branch: &BranchRef) -> Result<(usize, usize)> {
+        let claims = self.branch_archive(branch)?;
+        let docs = self.store.doc_versions(branch)?;
+        for d in &docs {
+            self.status_record(
+                d.id,
+                Status::Archived,
+                Some(format!("branch {branch} removed")),
+                "cli",
+            )?;
+        }
+        if self.active_ref().as_ref() == Some(branch) {
+            self.set_active(&BranchRef::default_branch())?;
+        }
+        Ok((claims, docs.len()))
+    }
+
+    /// `ctx remove <idea>`: remove every branch of a project.
+    pub fn remove_project(&mut self, project: &str) -> Result<(usize, usize, usize)> {
+        let branches = self.project_branches(project)?;
+        let (mut claims, mut docs) = (0, 0);
+        for b in &branches {
+            let (c, d) = self.remove_branch(b)?;
+            claims += c;
+            docs += d;
+        }
+        Ok((branches.len(), claims, docs))
     }
 
     // ---- compiling --------------------------------------------------------------

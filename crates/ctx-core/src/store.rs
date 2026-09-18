@@ -88,6 +88,9 @@ pub trait Store {
     /// Current (newest) version of each document, optionally for one branch.
     fn docs(&self, branch: Option<&BranchRef>) -> Result<Vec<Doc>, Self::Error>;
 
+    /// Every non-archived version of every document on a branch.
+    fn doc_versions(&self, branch: &BranchRef) -> Result<Vec<Doc>, Self::Error>;
+
     /// Current version of one document.
     fn doc(&self, branch: &BranchRef, name: &str) -> Result<Option<Doc>, Self::Error>;
 

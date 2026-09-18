@@ -103,6 +103,48 @@ fn idea_to_build_flow_with_spec_versions() {
     );
 }
 
+#[test]
+fn removing_an_idea_hides_everything_but_erases_nothing() {
+    let (_d, home) = setup();
+    let mut app = App::open(home.clone(), None).unwrap();
+    let research = app.new_project("gone").unwrap();
+    saved(app.save(draft("gone/research", Kind::Fact, "a")).unwrap());
+    saved(app.save(draft("gone/code", Kind::Decision, "b")).unwrap());
+    app.save_doc(&research, "spec", None, "# v1", "cli")
+        .unwrap();
+    app.save_doc(&research, "spec", None, "# v2", "cli")
+        .unwrap();
+    saved(app.save(draft("kept/research", Kind::Fact, "c")).unwrap());
+
+    let (branches, claims, docs) = app.remove_project("gone").unwrap();
+    assert_eq!((branches, claims, docs), (2, 2, 2));
+    assert!(
+        app.find_doc(&b("gone/code"), "spec").unwrap().is_none(),
+        "no older version resurfaces"
+    );
+    assert!(
+        !app.index().unwrap().contains("gone/"),
+        "{}",
+        app.index().unwrap()
+    );
+    assert!(app.index().unwrap().contains("kept/research"));
+    assert_eq!(
+        app.default_branch().unwrap(),
+        BranchRef::default_branch(),
+        "active branch reset"
+    );
+
+    // Nothing was erased: the records are still in the log, and a rebuilt
+    // index agrees that they are hidden.
+    let stats = app.store.stats().unwrap();
+    assert_eq!(stats.claims, 3);
+    drop(app);
+    std::fs::remove_dir_all(home.cache_dir()).unwrap();
+    let app = App::open(home, None).unwrap();
+    assert!(app.find_doc(&b("gone/research"), "spec").unwrap().is_none());
+    assert!(!app.index().unwrap().contains("gone/"));
+}
+
 fn setup() -> (tempfile::TempDir, CtxHome) {
     let dir = tempfile::tempdir().unwrap();
     let home = CtxHome::at(dir.path().join("ctx"));

@@ -309,6 +309,19 @@ describe("cross-chat continuity (no laptop involved)", () => {
     expect((await call("ctx_pack", { branch: "notes-app", doc: "spec" })).text).toMatch(/^# Notes v1/);
   });
 
+  it("a removed idea disappears from the index, including its spec", async () => {
+    const claim = buildClaim({ branch: "gone/research", kind: "fact", text: "x", status: "active" });
+    const doc = buildDoc({ branch: "gone/research", body: "# Gone spec" });
+    const status = (target: string) =>
+      JSON.stringify({ rec: "status", id: ulid(), claim: target, to: "archived", src: "cli", t_tx: "2026-09-19T00:00:00Z" });
+    fakeGitHub({
+      "log/m/2026-09.jsonl": [JSON.stringify(claim), JSON.stringify(doc), status(claim.id), status(doc.id)].join("\n") + "\n",
+    });
+    const idx = await call("ctx_index", {});
+    expect(idx.text).not.toMatch(/gone/);
+    expect((await call("ctx_pack", { branch: "gone", doc: "spec" })).text).toMatch(/No document named "spec"/);
+  });
+
   it("a compiled pack gets claims saved from chats since it was compiled", async () => {
     const old = buildClaim({ branch: "idea/research", kind: "fact", text: "Already compiled", status: "active" });
     const fresh = buildClaim({ branch: "idea/research", kind: "fact", text: "Saved from a chat later", status: "active" });

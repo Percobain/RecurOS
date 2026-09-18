@@ -211,7 +211,7 @@ The compiler picks the most useful claims for the budget. It favours constraints
 | Record a decision | `ctx save "..." -k decision -w "why"` |
 | Record something for research while in a code repo | `ctx save "..." -k fact --to research` |
 | Change my mind about a decision | `ctx save "new decision" -k decision --supersedes c:a505` |
-| Retire something that's no longer true | `ctx archive c:a505 --reason "we moved off Stripe"` |
+| Delete a claim, or a whole idea | `ctx delete c:a505` / `ctx delete notes-app` |
 | Find something | `ctx search webhooks retry` |
 | See the full context for a task | `ctx pack --task "add refund endpoint"` |
 | Write a handoff doc | `ctx pack --for handoff > HANDOFF.md` |
@@ -354,7 +354,7 @@ With no remote, everything still works locally. Offline is a normal state.
 | `ctx use <branch>` | Default branch outside a repo (for chat surfaces) |
 | `ctx branch new\|ls\|merge\|archive` | Manage branches |
 | `ctx review [accept\|reject]` | Handle claims agents proposed for other branches |
-| `ctx archive <id>` | Retire a claim (a status change; nothing is deleted) |
+| `ctx delete <c:xxxx \| idea \| idea/branch>` | Delete a claim, a branch or a whole idea (alias `ctx remove`). Gone everywhere, kept in history; asks before deleting more than one claim |
 | `ctx rate <id> up\|down` | Feedback that affects ranking |
 | `ctx refine` | Find near-duplicates worth merging |
 | `ctx sync` | Commit, pull, push |

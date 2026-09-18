@@ -167,7 +167,18 @@ enum Command {
     },
     /// Show one claim in full, with its history.
     Show { id: String },
+    /// Delete a claim (c:xxxx), a branch (idea/branch) or a whole idea.
+    /// It disappears everywhere but stays in the history.
+    #[command(visible_alias = "delete")]
+    Remove {
+        /// c:xxxx for one claim, idea/branch for a branch, or an idea name.
+        target: String,
+        /// Don't ask for confirmation.
+        #[arg(short, long)]
+        yes: bool,
+    },
     /// Retire a claim (a status flip; nothing is ever deleted).
+    #[command(hide = true)]
     Archive {
         id: String,
         #[arg(long)]
@@ -207,6 +218,9 @@ enum Command {
         limit: usize,
         #[arg(short, long)]
         verbose: bool,
+        /// Include deleted (archived) claims.
+        #[arg(long)]
+        all: bool,
     },
     /// Score packs against questions with known answers, to tune weights.
     Eval {
@@ -628,6 +642,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 );
             }
         }
+        Command::Remove { target, yes } => remove(&home, &target, yes)?,
         Command::Archive { id, reason } => {
             let mut app = open(&home)?;
             let c = app.find_one(&id)?;
@@ -699,6 +714,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             since,
             limit,
             verbose,
+            all,
         } => {
             let app = open(&home)?;
             let filter = Filter {
@@ -711,7 +727,16 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     DateTime::<Utc>::from_naive_utc_and_offset(d.and_time(Default::default()), Utc)
                 }),
                 limit: (limit > 0).then_some(limit),
-                ..Default::default()
+                statuses: if all {
+                    Vec::new()
+                } else {
+                    vec![
+                        Status::Active,
+                        Status::Proposed,
+                        Status::Superseded,
+                        Status::Rejected,
+                    ]
+                },
             };
             let claims = app.store.scan(&filter)?;
             if claims.is_empty() {
@@ -775,6 +800,100 @@ fn run(cli: Cli) -> Result<ExitCode> {
         Command::Hook(HookCmd::SessionStart) => session_start(&home)?,
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Ask before hiding more than one claim. Non-interactive callers must
+/// pass --yes, so a script can never delete an idea by accident.
+fn confirm(question: &str, yes: bool) -> Result<bool> {
+    if yes {
+        return Ok(true);
+    }
+    if !io::stdin().is_terminal() {
+        bail!("{question} Re-run with --yes to confirm.");
+    }
+    eprint!("{question} [y/N] ");
+    let mut answer = String::new();
+    io::stdin().read_line(&mut answer)?;
+    Ok(matches!(answer.trim(), "y" | "Y" | "yes"))
+}
+
+fn plural(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+fn remove(home: &CtxHome, target: &str, yes: bool) -> Result<()> {
+    let mut app = open(home)?;
+    let t = target.trim();
+    let is_claim = t.starts_with("c:")
+        || t.starts_with("b3:")
+        || (t.len() == 26 && ulid::Ulid::from_string(t).is_ok());
+    if is_claim {
+        let c = app.find_one(t)?;
+        if c.status == Status::Archived {
+            println!("{} is already deleted", tag(&c.cid));
+            return Ok(());
+        }
+        app.transition(&c, Status::Archived, Some("removed".into()), "cli")?;
+        println!("deleted {} \"{}\"", tag(&c.cid), first_line(&c.text));
+    } else if t.contains('/') {
+        let b = BranchRef::new(t)?;
+        let (claims, docs) = app.removal_counts(&b)?;
+        if claims + docs == 0 && !app.branches.contains(&b) {
+            bail!("no branch named `{t}`");
+        }
+        let what = format!(
+            "{}, {}",
+            plural(claims, "claim", "claims"),
+            plural(docs, "document version", "document versions")
+        );
+        if !confirm(&format!("Delete branch {b} ({what})?"), yes)? {
+            println!("nothing deleted");
+            return Ok(());
+        }
+        let (claims, docs) = app.remove_branch(&b)?;
+        println!(
+            "deleted {b}: {}, {}",
+            plural(claims, "claim", "claims"),
+            plural(docs, "document version", "document versions")
+        );
+    } else {
+        let project = slug(t);
+        let branches = app.project_branches(&project)?;
+        if branches.is_empty() {
+            bail!("no idea named `{project}`. To delete one claim, use its tag: ctx delete c:xxxx");
+        }
+        let (mut claims, mut docs) = (0, 0);
+        for b in &branches {
+            let (c, d) = app.removal_counts(b)?;
+            claims += c;
+            docs += d;
+        }
+        let names: Vec<String> = branches.iter().map(|b| b.to_string()).collect();
+        if !confirm(
+            &format!(
+                "Delete the idea `{project}` ({}: {}, {})?",
+                names.join(", "),
+                plural(claims, "claim", "claims"),
+                plural(docs, "document version", "document versions")
+            ),
+            yes,
+        )? {
+            println!("nothing deleted");
+            return Ok(());
+        }
+        let (n, claims, docs) = app.remove_project(&project)?;
+        println!(
+            "deleted {project}: {}, {}, {}",
+            plural(n, "branch", "branches"),
+            plural(claims, "claim", "claims"),
+            plural(docs, "document version", "document versions")
+        );
+    }
+    println!(
+        "gone from packs, search, AGENTS.md and your chats; still in the history (the log is never erased)"
+    );
+    let _ = app.refresh_agents_md();
+    Ok(())
 }
 
 fn read_stdin() -> Result<String> {

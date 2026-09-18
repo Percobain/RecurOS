@@ -328,8 +328,15 @@ export function parseLog(files: string[]): LoggedClaim[] {
  * are skipped, like the Rust reader does.
  */
 export function parseDocs(files: string[]): LoggedDoc[] {
+  // `ctx remove` hides a document version with an archived status record
+  // that targets its id, exactly as it hides a claim.
+  const archived = new Set<string>();
+  for (const r of records(files)) {
+    if (r.rec === "status" && r.to === "archived" && typeof r.claim === "string") archived.add(r.claim);
+  }
   const latest = new Map<string, LoggedDoc>();
   for (const r of records(files)) {
+    if (typeof r.id === "string" && archived.has(r.id)) continue;
     if (
       r.rec !== "doc" ||
       typeof r.id !== "string" ||
