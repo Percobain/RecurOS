@@ -274,6 +274,56 @@ describe("active branch", () => {
   });
 });
 
+describe("cross-chat continuity (no laptop involved)", () => {
+  it("an idea started in one chat is visible and continuable in another", async () => {
+    const files: Record<string, string> = {};
+    fakeGitHub(files);
+
+    // ChatGPT: the user starts an idea by name; a bare name means <idea>/research.
+    const saved = await call("ctx_append", {
+      branch: "Notes App",
+      kind: "decision",
+      text: "Offline-first, sync later",
+      why: "people take notes on the subway",
+    });
+    expect(saved.text).toMatch(/Saved decision to notes-app\/research/);
+    await call("ctx_append", { branch: "notes-app", kind: "rejected", text: "Real-time collaboration in v1" });
+
+    // claude.ai: the index is built from the log, so the new idea is listed
+    // even though no laptop has compiled a pack for it.
+    const idx = await call("ctx_index", {});
+    expect(idx.text).toMatch(/`notes-app\/research`: 2 claims/);
+    expect(idx.text).toMatch(/To start a new idea/);
+
+    // ...and continuing it returns a live dossier with the chat protocols.
+    const pack = await call("ctx_pack", { branch: "notes-app" });
+    expect(pack.text).toMatch(/^# Context dossier: notes-app\/research/);
+    expect(pack.text).toMatch(/## Thesis\n\n- Offline-first, sync later \[c:[0-9a-f]{4}\]\n  - why: people take notes/);
+    expect(pack.text).toMatch(/## Contradictions and rejected paths\n\n- Real-time collaboration in v1/);
+    expect(pack.text).toMatch(/When I say "ctx spec"/);
+
+    // claude.ai saves the spec; the dossier then lists it as a document.
+    await call("ctx_append", { branch: "notes-app", kind: "decision", text: "Build v1 per the spec", doc: "# Notes v1\n\nNotes and todos." });
+    const withSpec = await call("ctx_pack", { branch: "notes-app" });
+    expect(withSpec.text).toMatch(/## Documents\n\n- `spec`: Notes v1/);
+    expect((await call("ctx_pack", { branch: "notes-app", doc: "spec" })).text).toMatch(/^# Notes v1/);
+  });
+
+  it("a compiled pack gets claims saved from chats since it was compiled", async () => {
+    const old = buildClaim({ branch: "idea/research", kind: "fact", text: "Already compiled", status: "active" });
+    const fresh = buildClaim({ branch: "idea/research", kind: "fact", text: "Saved from a chat later", status: "active" });
+    const oldTag = old.cid.slice(3, 7);
+    fakeGitHub({
+      "packs/idea/research.md": `# Context dossier: idea/research\n\n- Already compiled [c:${oldTag}]\n`,
+      "log/m/2026-09.jsonl": JSON.stringify(old) + "\n",
+      "log/cloud/2026-09.jsonl": JSON.stringify(fresh) + "\n",
+    });
+    const r = await call("ctx_pack", { branch: "idea/research" });
+    expect(r.text).toMatch(/## Saved since this pack was compiled\n\n- Saved from a chat later/);
+    expect(r.text.match(/Already compiled/g)).toHaveLength(1);
+  });
+});
+
 describe("rate limit guard", () => {
   it("returns 429 with a JSON-RPC error when the limiter refuses, before touching GitHub", async () => {
     const fetchSpy = vi.fn();

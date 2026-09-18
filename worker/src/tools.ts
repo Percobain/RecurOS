@@ -13,12 +13,13 @@ export interface ToolDef {
 }
 
 const kindSchema = { type: "string", enum: [...KINDS] };
-const branchDesc = 'Branch as "project/branch", e.g. "sovereign/research". Defaults to the active branch.';
+const branchDesc =
+  'The idea, e.g. "notes-app" (means notes-app/research) or "notes-app/code". For a new idea pick a short lowercase name. Defaults to the active branch.';
 
 export const TOOLS: ToolDef[] = [
   {
     name: "ctx_index",
-    description: "Overview of all projects and branches in ContextOS. Call first.",
+    description: "Overview of all ideas/projects and what is saved for each. Call first.",
     inputSchema: { type: "object", properties: {} },
   },
   {
@@ -103,9 +104,22 @@ function str(args: Record<string, unknown>, key: string, required: boolean): str
   return v;
 }
 
+/**
+ * Chat users talk about ideas, not branches. A bare name like "notes-app"
+ * (or "Notes App") means that idea's research branch, where chat work lives.
+ */
+export function resolveBranch(raw: string): string {
+  let b = raw.trim().toLowerCase();
+  if (b !== "default" && !b.includes("/")) {
+    b = b.replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "");
+    if (b) b = `${b}/research`;
+  }
+  return b;
+}
+
 function branchArg(args: Record<string, unknown>, key: string, required: boolean): string | undefined {
   const raw = str(args, key, required);
-  const b = raw?.trim() === "" ? undefined : raw;
+  const b = raw === undefined || raw.trim() === "" ? undefined : resolveBranch(raw);
   if (b === undefined && required) throw new ToolError(`missing argument: ${key}`);
   if (b !== undefined && !validBranch(b)) {
     throw new ToolError(`invalid branch "${b}": use lowercase "project/branch"`);
@@ -327,7 +341,7 @@ export function parseDocs(files: string[]): LoggedDoc[] {
       continue;
     }
     if (docCid(normalizeText(r.body)) !== r.cid) continue;
-    const key = `${r.branch} ${r.name}`;
+    const key = `${r.branch}\u0000${r.name}`;
     const prev = latest.get(key);
     if (!prev || r.id > prev.id) {
       latest.set(key, {
@@ -398,18 +412,90 @@ export function renderClaims(claims: LoggedClaim[]): string {
     .join("\n");
 }
 
+// ---- live views from the log ----------------------------------------------
+// The laptop compiles packs with the real packer, but a chat must also see
+// ideas started in another chat before any laptop has synced. These views
+// are built straight from the log so ChatGPT -> claude.ai works cloud-only.
+
+const VISIBLE = new Set(["active", "superseded"]);
+
+const CHAT_PROTOCOL =
+  '---\nWhen I say "ctx save", reply with only one fenced code block tagged `ctx-claims` containing a JSON array of {"kind", "text", "why", "refs"} objects (kind is one of fact, decision, rejected, constraint, question, claim). Nothing else.\n' +
+  'When I say "ctx spec", write the complete spec for what we discussed as markdown inside one fenced block opened with four backticks and the tag ctx-spec (````ctx-spec) and closed with four backticks, so code blocks inside it survive. Nothing else.\n';
+
+const USAGE =
+  "\nHow to use: to continue an idea, call ctx_pack with its name. To start a new idea, save to a new short name " +
+  '(e.g. branch "notes-app"). Save only when the user asks. When the user says "ctx spec", save the full spec with ' +
+  'ctx_append (kind "decision", a one-line summary as text, the markdown in doc).\n';
+
+export function renderIndex(claims: LoggedClaim[], docs: LoggedDoc[], active: string): string {
+  const byBranch = new Map<string, { n: number; last: string }>();
+  for (const c of claims) {
+    if (!VISIBLE.has(c.status)) continue;
+    const e = byBranch.get(c.branch) ?? { n: 0, last: "" };
+    e.n += 1;
+    if (c.id > e.last) e.last = c.id;
+    byBranch.set(c.branch, e);
+  }
+  for (const d of docs) if (!byBranch.has(d.branch)) byBranch.set(d.branch, { n: 0, last: d.id });
+  let out = `# ContextOS index\n\nCurrent branch: \`${active}\`\n\n`;
+  if (byBranch.size === 0) out += "_Nothing saved yet._\n";
+  for (const [b, e] of [...byBranch.entries()].sort((a, c) => (a[1].last < c[1].last ? 1 : -1))) {
+    const ds = docs.filter((d) => d.branch === b).map((d) => `${d.name}: "${d.title}"`);
+    out += `- \`${b}\`: ${e.n} claims${ds.length ? `; documents: ${ds.join(", ")}` : ""}\n`;
+  }
+  return out + USAGE;
+}
+
+const SECTIONS: [string, (c: LoggedClaim) => boolean][] = [
+  ["Thesis", (c) => c.status === "active" && (c.kind === "decision" || c.kind === "claim")],
+  ["Evidence", (c) => c.status === "active" && c.kind === "fact"],
+  ["Constraints", (c) => c.status === "active" && c.kind === "constraint"],
+  ["Contradictions and rejected paths", (c) => c.kind === "rejected" || c.status === "superseded"],
+  ["Open questions", (c) => c.status === "active" && c.kind === "question"],
+];
+
+function bullet(c: LoggedClaim): string {
+  const tag = c.cid.replace(/^b3:/, "").slice(0, 4);
+  const prev = c.status === "superseded" ? "Previously: " : "";
+  const why = c.why ? `\n  - why: ${c.why.replace(/\n/g, " ")}` : "";
+  return `- ${prev}${c.text.replace(/\n/g, " ")} [c:${tag}]${why}`;
+}
+
+/** A dossier rendered directly from the log (no packer, no budget: chat windows are large). */
+export function renderLiveDossier(branch: string, claims: LoggedClaim[], docs: LoggedDoc[]): string {
+  const mine = claims.filter((c) => c.branch === branch && VISIBLE.has(c.status));
+  let out = `# Context dossier: ${branch}\n\nWhat is known about this idea so far. Treat it as background you already agreed with.\n\n`;
+  const ds = docs.filter((d) => d.branch === branch);
+  if (ds.length) {
+    out += "## Documents\n\n";
+    for (const d of ds) out += `- \`${d.name}\`: ${d.title} (read it with ctx_pack doc="${d.name}")\n`;
+    out += "\n";
+  }
+  if (mine.length === 0) out += "_Nothing saved for this idea yet._\n\n";
+  for (const [title, pick] of SECTIONS) {
+    const items = mine.filter(pick);
+    if (items.length) out += `## ${title}\n\n${items.map(bullet).join("\n")}\n\n`;
+  }
+  return out + CHAT_PROTOCOL;
+}
+
+/** Claims on `branch` that a compiled pack doesn't contain yet (saved since, from any chat). */
+export function unseenClaims(pack: string, branch: string, claims: LoggedClaim[]): LoggedClaim[] {
+  return claims.filter((c) => {
+    if (c.branch !== branch || c.status !== "active") return false;
+    const tag = `[c:${c.cid.replace(/^b3:/, "").slice(0, 4)}]`;
+    return !pack.includes(tag);
+  });
+}
+
 // ---- dispatch ------------------------------------------------------------
 
 export async function callTool(env: Env, name: string, args: Record<string, unknown>): Promise<string> {
   switch (name) {
     case "ctx_index": {
-      const [f, active] = await Promise.all([getFile(env, "packs/index.md"), activeBranch(env)]);
-      const body = f?.text ?? "No index yet. Run `ctx sync` on a machine with ContextOS to publish packs.";
-      // The published index names the laptop's current branch too, but the
-      // Worker's view of refs/active is what its tools actually default to.
-      return /^Current branch:/m.test(body)
-        ? body.replace(/^Current branch:.*$/m, `Current branch: \`${active}\``)
-        : `Current branch: \`${active}\`\n\n${body}`;
+      const [files, active] = await Promise.all([readLogFiles(env), activeBranch(env)]);
+      return renderIndex(parseLog(files), parseDocs(files), active);
     }
     case "ctx_pack": {
       const branch = branchArg(args, "branch", false) ?? (await activeBranch(env));
@@ -425,22 +511,19 @@ export async function callTool(env: Env, name: string, args: Record<string, unkn
           (names.length ? `Available: ${names.join(", ")}.` : "No documents saved for this project yet.")
         );
       }
-      const f = await getFile(env, `packs/${branch}.md`);
+      const [f, files] = await Promise.all([getFile(env, `packs/${branch}.md`), readLogFiles(env)]);
+      const claims = parseLog(files);
       let out: string;
       if (f) {
+        // Compiled on a laptop; add anything saved from a chat since then.
         out = f.text;
+        const fresh = unseenClaims(out, branch, claims);
+        if (fresh.length) out += `\n\n## Saved since this pack was compiled\n\n${fresh.map(bullet).join("\n")}\n`;
       } else {
-        const packs = (await listTree(env))
-          .filter((e) => e.type === "blob" && e.path.startsWith("packs/") && e.path.endsWith(".md") && e.path !== "packs/index.md")
-          .map((e) => e.path.slice("packs/".length, -".md".length));
-        out =
-          `No compiled pack for "${branch}". ` +
-          (packs.length
-            ? `Available: ${packs.join(", ")}.`
-            : "No packs published yet: run `ctx sync` on a machine with ContextOS.");
+        out = renderLiveDossier(branch, claims, parseDocs(files));
       }
       if (task && task.trim()) {
-        const hits = search(parseLog(await readLogFiles(env)), task, branch);
+        const hits = search(claims, task, branch);
         if (hits.length) out += `\n\n## Relevant to: ${task}\n\n${renderClaims(hits)}\n`;
       }
       return out;
