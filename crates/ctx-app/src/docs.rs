@@ -28,7 +28,9 @@ use crate::App;
 /// Name of the document `ctx build` hands to coding agents.
 pub const SPEC: &str = "spec";
 /// File the spec is written to inside a bound repo.
-pub const SPEC_FILE: &str = "SPEC.md";
+pub const SPEC_FILE: &str = ".ctx/SPEC.md";
+/// Where the spec was written before `.ctx/` existed.
+const LEGACY_SPEC_FILE: &str = "SPEC.md";
 
 const MARKER_PREFIX: &str = "<!-- ctx:doc ";
 
@@ -201,6 +203,19 @@ impl App {
             return Ok(SpecFile::NoSpec);
         };
         let path = binding.root.join(SPEC_FILE);
+        // A root SPEC.md we wrote and nobody edited has moved into .ctx/.
+        let legacy = binding.root.join(LEGACY_SPEC_FILE);
+        if let Ok(old) = fs::read_to_string(&legacy) {
+            let (first, rest) = old.split_once('\n').unwrap_or((old.as_str(), ""));
+            if marker_cid(first)
+                .is_some_and(|c| ctx_core::record::doc_cid(&normalize_text(rest)) == c)
+            {
+                let _ = fs::remove_file(&legacy);
+            }
+        }
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir)?;
+        }
         let wanted = format!("{}\n{}\n", marker(&doc), doc.body);
         match fs::read_to_string(&path) {
             Err(_) => {}

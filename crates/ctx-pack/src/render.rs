@@ -107,6 +107,7 @@ Active branch: {branch}. The context above is compiled; don't re-derive it.
 Save only when I explicitly say so, plus one batched call at session end.
 Use ctx_append(kind, text, why, refs). Don't log progress or summaries.
 Cross-branch material: ctx_propose(target_branch, ...).
+For anything else ContextOS does (new idea, spec, build, delete, sync, map, handoff), run the `ctx` CLI yourself; commands are in `.ctx/commands.md` (or `ctx commands`). Ask before deleting.
 ";
 
 const CLAIMS_PROTOCOL: &str = "---

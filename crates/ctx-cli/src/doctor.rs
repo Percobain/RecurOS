@@ -94,7 +94,7 @@ pub fn run(home: CtxHome, cwd: &Path) -> bool {
             let branch = b.branch_ref().map(|x| x.to_string()).unwrap_or_default();
             r.ok(format!(
                 "bound to `{branch}` by {}",
-                b.root.join(".ctx.yaml").display()
+                b.root.join(ctx_branch::BINDING_FILE).display()
             ));
             if let Ok(br) = b.branch_ref()
                 && !app.branches.contains(&br)
@@ -164,11 +164,11 @@ pub fn run(home: CtxHome, cwd: &Path) -> bool {
             }
         }
         Ok(None) => r.warn(
-            "not inside a bound project (no .ctx.yaml)",
+            "not inside a bound project (no .ctx/config.yaml)",
             "run `ctx init` in your project to wire it up",
         ),
         Err(e) => r.fail(
-            format!("bad .ctx.yaml: {e}"),
+            format!("bad .ctx/config.yaml: {e}"),
             "fix or delete it, then `ctx init`",
         ),
     }

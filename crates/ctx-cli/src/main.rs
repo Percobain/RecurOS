@@ -157,6 +157,8 @@ enum Command {
     Use { branch: String },
     /// Where am I: store, branch, counts, pending proposals.
     Status,
+    /// Every command, by what you want to do (also in .ctx/commands.md).
+    Commands,
     /// Manage context branches.
     #[command(subcommand)]
     Branch(BranchCmd),
@@ -636,6 +638,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             sync_now(&mut app, false)?;
         }
         Command::Status => status(&home)?,
+        Command::Commands => print!("{}", ctx_app::COMMANDS_MD),
         Command::Branch(cmd) => branch_cmd(&home, cmd)?,
         Command::Review { action } => review(&home, action)?,
         Command::Show { id } => {
@@ -1042,6 +1045,7 @@ fn init(
         project: project.clone(),
         branch: branch.clone(),
         root: root.clone(),
+        legacy: false,
     };
     if existing.as_ref().map(|b| (&b.project, &b.branch)) != Some((&project, &branch)) {
         binding.write(&root)?;
@@ -1056,14 +1060,16 @@ fn init(
     if created_store {
         println!("  created store at {}", home.root().display());
     }
-    println!("  ✓ .ctx.yaml   binds this repo to {project}/{branch} (commit it)");
+    println!(
+        "  ✓ .ctx/       config.yaml binds this repo to {project}/{branch}; commands.md for agents (commit it)"
+    );
     println!("  ✓ AGENTS.md   ContextOS section added; your own content is kept (commit it)");
     match spec {
         ctx_app::SpecFile::Written | ctx_app::SpecFile::Unchanged => {
-            println!("  ✓ SPEC.md     the spec from {project}'s research (commit it)")
+            println!("  ✓ .ctx/SPEC.md  the spec from {project}'s research")
         }
         ctx_app::SpecFile::LeftAlone => {
-            println!("  ! SPEC.md     exists and isn't ours (or was edited); left as is")
+            println!("  ! .ctx/SPEC.md  was edited by hand; left as is")
         }
         ctx_app::SpecFile::NoSpec => {}
     }
@@ -1318,7 +1324,7 @@ fn session_start(home: &CtxHome) -> Result<()> {
     }
     if let Ok(ctx_app::SpecFile::Written) = app.refresh_spec_file() {
         println!(
-            "ContextOS: a new version of the spec was saved since your last session; SPEC.md is updated. Re-read it before continuing.\n"
+            "ContextOS: a new version of the spec was saved since your last session; .ctx/SPEC.md is updated. Re-read it before continuing.\n"
         );
     }
     if let Some(block) = app.refresh_agents_md()? {

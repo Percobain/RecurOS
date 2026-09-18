@@ -10,6 +10,6 @@ mod binding;
 mod config;
 mod templates;
 
-pub use binding::{BINDING_FILE, Binding};
+pub use binding::{BINDING_FILE, Binding, CTX_DIR, LEGACY_BINDING_FILE};
 pub use config::{BranchConfig, BranchDef, BranchError, PoolSource};
 pub use templates::{TEMPLATES, template};

@@ -126,7 +126,7 @@ in a coding agent, without copying anything by hand.
    the complete markdown in `doc`. It lands in `log/cloud/` as a `doc` record
    plus a claim that refers to it (`doc:spec`).
 4. **Build:** on your laptop, `ctx build <idea>` pulls the spec, creates a
-   project folder with `SPEC.md`, `AGENTS.md` and the agent wiring, and then
+   project folder with `.ctx/SPEC.md`, `AGENTS.md` and the agent wiring, and then
    you run `claude` in it.
 
 Any chat can read the spec back with `ctx_pack(doc: "spec")`.

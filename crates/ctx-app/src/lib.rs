@@ -29,6 +29,10 @@ use ulid::Ulid;
 pub use claims_block::ClaimInput;
 pub use docs::{DocSaved, SPEC, SPEC_FILE, SpecFile};
 
+/// The command reference written to `.ctx/commands.md`, so agents can run
+/// `ctx` for the user. Also printed by `ctx commands`.
+pub const COMMANDS_MD: &str = include_str!("commands.md");
+
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Retrieval depth for task-focused packs (spec §8.3).
@@ -111,6 +115,13 @@ impl App {
             Some(dir) => Binding::discover(dir)?,
             None => None,
         };
+        // Repos bound before `.ctx/` existed move their binding into it the
+        // first time any command runs there.
+        if let Some(b) = &binding
+            && b.legacy
+        {
+            b.write(&b.root)?;
+        }
         let mut app = App {
             home,
             store,

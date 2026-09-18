@@ -57,6 +57,14 @@ impl App {
             projection: Some(Projection::AgentsMd),
             ..Default::default()
         })?;
+        // Keep the agent-facing command list current alongside AGENTS.md.
+        let commands = binding.root.join(".ctx").join("commands.md");
+        if fs::read_to_string(&commands).ok().as_deref() != Some(crate::COMMANDS_MD) {
+            if let Some(dir) = commands.parent() {
+                fs::create_dir_all(dir)?;
+            }
+            fs::write(&commands, crate::COMMANDS_MD)?;
+        }
         let path = binding.root.join("AGENTS.md");
         let existing = fs::read_to_string(&path).unwrap_or_default();
         if current_block(&existing) == Some(pack.markdown.as_str()) {

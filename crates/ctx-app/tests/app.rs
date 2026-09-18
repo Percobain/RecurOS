@@ -53,16 +53,17 @@ fn idea_to_build_flow_with_spec_versions() {
         project: "habit".into(),
         branch: "code".into(),
         root: repo.clone(),
+        legacy: false,
     }
     .write(&repo)
     .unwrap();
     let mut app = App::open(home.clone(), Some(&repo)).unwrap();
     assert_eq!(app.refresh_spec_file().unwrap(), ctx_app::SpecFile::Written);
-    let spec = std::fs::read_to_string(repo.join("SPEC.md")).unwrap();
+    let spec = std::fs::read_to_string(repo.join(".ctx/SPEC.md")).unwrap();
     assert!(spec.starts_with("<!-- ctx:doc name=spec cid=b3:"));
     assert!(spec.ends_with("# Habit v1\n\nStreaks.\n"));
     let pack = app.pack(&PackOpts::default()).unwrap().markdown;
-    assert!(pack.contains("read it in `SPEC.md`"), "{pack}");
+    assert!(pack.contains("read it in `.ctx/SPEC.md`"), "{pack}");
     assert!(
         pack.contains("Gamified leaderboards"),
         "code inherits rejected: {pack}"
@@ -77,8 +78,8 @@ fn idea_to_build_flow_with_spec_versions() {
         .unwrap();
     assert_eq!(app.refresh_spec_file().unwrap(), ctx_app::SpecFile::Written);
     // ...but a hand-edited one is left alone.
-    let edited = std::fs::read_to_string(repo.join("SPEC.md")).unwrap() + "\nmy notes\n";
-    std::fs::write(repo.join("SPEC.md"), &edited).unwrap();
+    let edited = std::fs::read_to_string(repo.join(".ctx/SPEC.md")).unwrap() + "\nmy notes\n";
+    std::fs::write(repo.join(".ctx/SPEC.md"), &edited).unwrap();
     app.save_doc(&research, "spec", None, "# Habit v3", "cli")
         .unwrap();
     assert_eq!(
@@ -86,7 +87,7 @@ fn idea_to_build_flow_with_spec_versions() {
         ctx_app::SpecFile::LeftAlone
     );
     assert_eq!(
-        std::fs::read_to_string(repo.join("SPEC.md")).unwrap(),
+        std::fs::read_to_string(repo.join(".ctx/SPEC.md")).unwrap(),
         edited
     );
 
@@ -145,6 +146,54 @@ fn removing_an_idea_hides_everything_but_erases_nothing() {
     assert!(!app.index().unwrap().contains("gone/"));
 }
 
+#[test]
+fn old_layout_repos_migrate_into_dot_ctx() {
+    let (dir, home) = setup();
+    let mut app = App::open(home.clone(), None).unwrap();
+    let research = app.new_project("old").unwrap();
+    app.save_doc(&research, "spec", None, "# Old spec", "cli")
+        .unwrap();
+    drop(app);
+
+    // A repo from before .ctx/: binding at .ctx.yaml, spec at SPEC.md.
+    let repo = dir.path().join("old");
+    std::fs::create_dir_all(&repo).unwrap();
+    std::fs::write(repo.join(".ctx.yaml"), "project: old\nbranch: code\n").unwrap();
+    let app = App::open(home.clone(), Some(&repo)).unwrap();
+    assert!(!repo.join(".ctx.yaml").exists(), "binding moved");
+    assert!(repo.join(".ctx/config.yaml").exists());
+    // The old SPEC.md was written by ctx and untouched, so it moves too.
+    let spec_path = repo.join(".ctx/SPEC.md");
+    app.refresh_spec_file().unwrap();
+    let written = std::fs::read_to_string(&spec_path).unwrap();
+    std::fs::write(repo.join("SPEC.md"), &written).unwrap();
+    std::fs::remove_file(&spec_path).unwrap();
+    app.refresh_spec_file().unwrap();
+    assert!(
+        !repo.join("SPEC.md").exists(),
+        "untouched root SPEC.md removed"
+    );
+    assert!(spec_path.exists());
+
+    // A hand-written root SPEC.md is never touched.
+    std::fs::write(repo.join("SPEC.md"), "# my own notes\n").unwrap();
+    app.refresh_spec_file().unwrap();
+    assert_eq!(
+        std::fs::read_to_string(repo.join("SPEC.md")).unwrap(),
+        "# my own notes\n"
+    );
+
+    // Agents get the command list.
+    app.refresh_agents_md().unwrap();
+    let cmds = std::fs::read_to_string(repo.join(".ctx/commands.md")).unwrap();
+    assert!(cmds.contains("ctx delete"));
+    assert!(
+        std::fs::read_to_string(repo.join("AGENTS.md"))
+            .unwrap()
+            .contains(".ctx/commands.md")
+    );
+}
+
 fn setup() -> (tempfile::TempDir, CtxHome) {
     let dir = tempfile::tempdir().unwrap();
     let home = CtxHome::at(dir.path().join("ctx"));
@@ -176,6 +225,7 @@ fn bound_app(dir: &Path, home: &CtxHome) -> App {
         project: "sovereign".into(),
         branch: "code".into(),
         root: repo.clone(),
+        legacy: false,
     }
     .write(&repo)
     .unwrap();

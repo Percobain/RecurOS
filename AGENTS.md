@@ -19,7 +19,6 @@ Compiled by ContextOS. These are settled; build on them.
 - Golden CIDs are asserted as literals produced by an independent Python implementation (`tests/golden/reference.py`) [c:51a7]
 - Specs are a separate doc log record, not a seventh claim kind (`crates/ctx-app/src/docs.rs`, `crates/ctx-core/src/record.rs`) [c:bb1b]
 - The code template inherits decision, constraint and rejected from research, and research holds constraints (`crates/ctx-branch/src/templates.rs`) [c:574b]
-- Unlimited-budget packs (handoffs) include every claim with positive weight (`crates/ctx-pack/src/select.rs`) [c:6c05]
 - Kind is not a facility-location coverage feature in the packer (`crates/ctx-pack/src/lib.rs`) [c:57b0]
 - One binary: the daemon is ctx daemon, not a separate ctxd [c:c42a]
 - The Claude Code SessionStart hook lives in .claude/settings.local.json (`crates/ctx-wire/src/lib.rs`) [c:9309]
@@ -34,5 +33,6 @@ Active branch: contextos/code. The context above is compiled; don't re-derive it
 Save only when I explicitly say so, plus one batched call at session end.
 Use ctx_append(kind, text, why, refs). Don't log progress or summaries.
 Cross-branch material: ctx_propose(target_branch, ...).
-<!-- ctx/1 b=contextos/code n=17 t=600/700 root=b3:e0dbde8f gen=01M2SVDM v=0.1.0 -->
+For anything else ContextOS does (new idea, spec, build, delete, sync, map, handoff), run the `ctx` CLI yourself; commands are in `.ctx/commands.md` (or `ctx commands`). Ask before deleting.
+<!-- ctx/1 b=contextos/code n=16 t=617/700 root=b3:36e62493 gen=01M2V371 v=0.1.0 -->
 <!-- ctx:end -->

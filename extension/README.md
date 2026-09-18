@@ -52,7 +52,7 @@ This is the flow the extension is built for:
    ctx build my-idea
    cd my-idea && claude
    ```
-   `ctx build` creates the repo, writes the spec to `SPEC.md`, puts the
+   `ctx build` creates the repo, writes the spec to `.ctx/SPEC.md`, puts the
    research conclusions in `AGENTS.md`, and wires your coding agents.
 
 The popup shows the selected branch's documents under the branch picker

@@ -84,7 +84,7 @@ ctx init
 
 ```
 ContextOS: acme-api/code
-  ✓ .ctx.yaml   binds this repo to acme-api/code (commit it)
+  ✓ .ctx/       config.yaml binds this repo to acme-api/code; commands.md for agents (commit it)
   ✓ AGENTS.md   ContextOS section added; your own content is kept (commit it)
   claude-code:
     ✓ wrote    CLAUDE.md imports AGENTS.md
@@ -242,7 +242,7 @@ ctx build habit-tracker
 cd habit-tracker && claude
 ```
 
-`ctx build` pulls the latest research, creates the repo, and writes `SPEC.md` (the spec), `AGENTS.md` (the decisions, constraints and rejected ideas from research) and your agent's configuration. Tell the agent "Build this from SPEC.md". If you later refine the spec in the chat, the next session updates `SPEC.md` and tells the agent to re-read it (it never overwrites your own edits).
+`ctx build` pulls the latest research, creates the repo, and writes `.ctx/SPEC.md` (the spec), `AGENTS.md` (the decisions, constraints and rejected ideas from research) and your agent's configuration. Tell the agent "Build this from .ctx/SPEC.md". If you later refine the spec in the chat, the next session updates `.ctx/SPEC.md` and tells the agent to re-read it (it never overwrites your own edits).
 
 See the whole project at a glance with `ctx map > MAP.md`, a "metro map" where each branch is a line and each claim a station, coloured by kind. It renders directly on GitHub:
 
@@ -341,10 +341,11 @@ With no remote, everything still works locally. Offline is a normal state.
 | Command | What it does |
 |---|---|
 | `ctx new <idea>` | Start an idea: creates its research and code branches and points chat tools at research |
-| `ctx build <idea>` | Hand an idea to a coding agent: new repo with `SPEC.md`, `AGENTS.md` and agent configs |
+| `ctx build <idea>` | Hand an idea to a coding agent: new repo with `.ctx/SPEC.md`, `AGENTS.md` and agent configs |
 | `ctx spec save\|show\|ls` | Save a spec from a file, stdin or `--paste`; print or list documents |
 | `ctx map [project]` | Draw the project as a Mermaid metro map (`--out MAP.md`) |
-| `ctx init` | Wire the current repo: `.ctx.yaml`, `AGENTS.md`, agent configs. Idempotent. |
+| `ctx init` | Wire the current repo: `.ctx/`, `AGENTS.md`, agent configs. Idempotent. |
+| `ctx commands` | Every command by task (the same list agents read from `.ctx/commands.md`) |
 | `ctx save "<text>"` | Record a claim. `-k kind`, `-w why`, `-r refs`, `-t tags`, `--to branch`, `--supersedes id`, `--paste` |
 | `ctx pack [branch]` | Compile context. `--task`, `--budget`, `--for agents-md\|dossier\|handoff\|markdown`, `--clip`, `--out FILE` |
 | `ctx search <query>` | Full-text search (stemmed). `-b branch`, `-k kind`, `-v` |
@@ -444,7 +445,7 @@ cd worker && npm ci && npm test # Cloudflare Worker
 |---|---|
 | `crates/ctx-core` | claim model, canonical form, content addressing, Merkle roots |
 | `crates/ctx-store-sqlite` | the SQLite index (the only crate with SQL) |
-| `crates/ctx-branch` | branch DAG, inheritance, `.ctx.yaml` |
+| `crates/ctx-branch` | branch DAG, inheritance, `.ctx/config.yaml` |
 | `crates/ctx-pack` | the compiler and renderers (pure) |
 | `crates/ctx-git` | sharded log, git sync |
 | `crates/ctx-app` | operations shared by CLI, MCP and daemon |

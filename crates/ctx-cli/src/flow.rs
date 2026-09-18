@@ -36,7 +36,7 @@ pub fn new(home: &CtxHome, name: &str) -> Result<()> {
     println!("  terminal              ctx save \"...\" -k fact     (lands in {research})");
     println!("\nWhen the spec is saved:");
     println!(
-        "  ctx build {project}      creates ./{project} with SPEC.md and wires your coding agent"
+        "  ctx build {project}      creates ./{project} with the spec and wires your coding agent"
     );
     Ok(())
 }

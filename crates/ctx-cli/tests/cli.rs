@@ -102,7 +102,7 @@ fn init_wires_a_repo_and_packs_follow_the_binding() {
 
     let out = ok(&ctx(&home, &repo, &["init", "--agents", "claude-code"]));
     assert!(out.contains("ContextOS: acme-api/code"), "{out}");
-    assert!(repo.join(".ctx.yaml").exists());
+    assert!(repo.join(".ctx/config.yaml").exists());
     assert!(repo.join(".mcp.json").exists());
     assert_eq!(
         std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap(),

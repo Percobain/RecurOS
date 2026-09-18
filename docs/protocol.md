@@ -35,7 +35,7 @@ separately in [canonical.md](canonical.md).
 These principles explain most of the decisions in the rest of the document.
 
 1. **The log is the only source of truth.** Everything else (the SQLite
-   index, compiled packs, `AGENTS.md`, `SPEC.md`) is derived and can be
+   index, compiled packs, `AGENTS.md`, `.ctx/SPEC.md`) is derived and can be
    deleted and rebuilt. This is what makes a lost cache or a lost machine
    harmless.
 2. **Records are immutable and append-only.** Nothing is edited or deleted.
@@ -476,7 +476,7 @@ In order of precedence:
 
 1. An explicit branch (`ctx save --to research`, a tool's `branch`
    argument). A bare name is resolved in the current project.
-2. The `.ctx.yaml` file found in the working directory or the nearest
+2. The `.ctx/config.yaml` file found in the working directory or the nearest
    parent directory:
 
    ```yaml
@@ -621,7 +621,7 @@ ordered by weight. Each bullet is:
 
 Documents visible from the branch are listed (never inlined) at the top,
 with their size and where to read them, for example ``read it in
-`SPEC.md` ``. `agents-md` packs end with the operating rules below;
+`.ctx/SPEC.md` ``. `agents-md` packs end with the operating rules below;
 dossiers end with the chat protocols of section 13.
 
 ```
@@ -666,9 +666,10 @@ them are safe to run repeatedly.
 
 | File | Content | Commit it? |
 |---|---|---|
-| `.ctx.yaml` | project and branch binding (section 7.5) | yes |
+| `.ctx/config.yaml` | project and branch binding (section 7.5) | yes |
+| `.ctx/commands.md` | every `ctx` command by task, for agents (section 9.4) | yes |
 | `AGENTS.md` | the `agents-md` pack, inside markers | yes |
-| `SPEC.md` | the project's spec, if one exists | yes |
+| `.ctx/SPEC.md` | the project's spec, if one exists | yes |
 | `CLAUDE.md`, `GEMINI.md` | a line `@AGENTS.md` (an import) | yes |
 | `.mcp.json`, `.cursor/mcp.json`, `.gemini/settings.json` | an `mcpServers.ctx` entry | yes |
 | `~/.codex/config.toml` | a `[mcp_servers.ctx]` table | (user config) |
@@ -693,7 +694,7 @@ configuration, so it works for a teammate who has never installed
 ContextOS and keeps working if a hook breaks. It is the floor everything
 else is built on.
 
-### 9.2 `SPEC.md`
+### 9.2 `.ctx/SPEC.md`
 
 The current version of the project's `spec` document, found on the bound
 branch, then on the branches it inherits from, then anywhere in the same
@@ -705,7 +706,31 @@ project. The first line is a marker:
 
 When a newer version exists, the file is replaced only if its content still
 matches the `cid` in the marker. If someone edited the file, or it has no
-marker (a hand-written `SPEC.md`), it is left alone and reported.
+marker (a hand-written spec), it is left alone and reported.
+
+Repositories set up before `.ctx/` existed kept the binding at `.ctx.yaml`
+and the spec at `SPEC.md`. The first `ctx` command run in such a
+repository moves the binding into `.ctx/config.yaml`, and the next spec
+refresh deletes a root `SPEC.md` only if it carries the marker and is
+unedited; a hand-written `SPEC.md` is never touched.
+
+### 9.4 `.ctx/commands.md`
+
+A task-oriented list of every `ctx` command (the same text `ctx commands`
+prints), rewritten whenever it changes. The operating rules in `AGENTS.md`
+tell the agent to read it and run `ctx` itself for anything ContextOS does
+(a new idea, a spec, a build, a delete, a sync, a map, a handoff), and to
+ask before deleting. The user never has to learn the commands; they can
+read the same list at any time.
+
+*Why a file and not the pack:* the list is about 800 tokens. Putting it in
+`AGENTS.md` would cost that on every session; as a file the agent reads it
+only when a request needs it.
+
+*Why `.ctx/`:* everything ContextOS owns in a repository lives in one
+folder. Only the files other tools read at fixed paths stay in the root:
+`AGENTS.md` (Codex, Cursor and most agents), `CLAUDE.md` (Claude Code),
+`.mcp.json` and the agents' own configuration folders.
 
 *Why the marker:* it lets ContextOS tell "a file we wrote and nobody
 touched" from "a file someone changed", so a new spec version from the
@@ -726,7 +751,7 @@ already defines hooks is never merged into. The hook goes in
 ContextOS never get a failing hook.
 
 The SessionStart hook (`ctx hook session-start`) does a bounded pull,
-refreshes `SPEC.md` and `AGENTS.md`, and prints context only if it changed
+refreshes `.ctx/SPEC.md` and `AGENTS.md`, and prints context only if it changed
 after the agent already loaded `AGENTS.md`. It always exits successfully.
 It never runs on every prompt, because changing the prompt on every turn
 would invalidate prompt caching for the whole conversation, which costs far
@@ -743,9 +768,9 @@ the user ever copying context between tools.
 | Start | `ctx new habit-tracker` | branches `habit-tracker/research` and `habit-tracker/code`; `refs/active` = research |
 | Research | talk in claude.ai or ChatGPT with the Worker connector (or the extension, or the clipboard) | claims on the research branch |
 | Spec | say "ctx spec" in the chat | a `doc` named `spec` on the research branch, plus a decision claim with a `doc:spec` ref |
-| Build | `ctx build habit-tracker` | pulls, creates `./habit-tracker`, runs `git init`, writes `.ctx.yaml`, `SPEC.md`, `AGENTS.md` and agent configuration |
+| Build | `ctx build habit-tracker` | pulls, creates `./habit-tracker`, runs `git init`, writes `.ctx/config.yaml`, `.ctx/SPEC.md`, `AGENTS.md` and agent configuration |
 | Code | `claude` in that directory | the agent starts knowing the spec, the decisions, the constraints and what was rejected |
-| Iterate | a new spec version from the chat | the next session start updates `SPEC.md` and tells the agent to re-read it |
+| Iterate | a new spec version from the chat | the next session start updates `.ctx/SPEC.md` and tells the agent to re-read it |
 
 `ctx map` draws a project as a Mermaid "metro map": each branch is a line,
 claims are stations in the order they were recorded, colour shows the kind,
@@ -757,7 +782,7 @@ GitHub.
 `ctx mcp` serves the Model Context Protocol over stdio: newline-delimited
 JSON-RPC 2.0 on stdin and stdout, diagnostics on stderr. Coding agents
 start it; it runs in the repository's directory, so routing uses that
-repository's `.ctx.yaml`.
+repository's `.ctx/config.yaml`.
 
 It keeps no protocol state. It answers `initialize` (echoing the client's
 protocol version), `ping`, `tools/list`, `tools/call`, and empty
