@@ -365,6 +365,7 @@ If the user has no git identity configured, commits use `ContextOS
 | Trigger | What happens |
 |---|---|
 | `ctx save` | Nothing on the network. Saving is always instant and offline. |
+| `ctx new`, `ctx use`, `ctx delete` | Sync immediately, because they change what chats see: a stale cloud makes ChatGPT and claude.ai write into the wrong idea. Failure is a warning; `ctx delete --cloud` makes it an error. |
 | `ctx sync` | Regenerate `packs/`, commit, pull (rebase), push. With no remote configured it only commits. |
 | MCP `ctx_append` | 30 seconds after the last write (so a burst becomes one commit), the MCP server syncs. Pending syncs are flushed when the agent session ends. |
 | Session start (Claude Code hook) | Pull with a 1.5 second limit; failure is reported and ignored so a session always starts. |
@@ -513,7 +514,8 @@ always right.
   branch. Removing more than one claim asks for confirmation, and refuses
   without `--yes` when it cannot ask. Everything disappears from packs,
   search, indexes, `AGENTS.md` and the chat connectors, and `ctx log` hides
-  it unless given `--all`.
+  it unless given `--all`. Removal syncs immediately so the chat connectors stop
+  showing it; `--cloud` turns a failure to reach the cloud into an error.
 
   *Why nothing is erased:* removal has to reach every machine and the
   Worker through the same append-only sync as everything else. Physically

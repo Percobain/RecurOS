@@ -14,7 +14,9 @@ export interface ToolDef {
 
 const kindSchema = { type: "string", enum: [...KINDS] };
 const branchDesc =
-  'The idea, e.g. "notes-app" (means notes-app/research) or "notes-app/code". For a new idea pick a short lowercase name. Defaults to the active branch.';
+  'The idea this belongs to, as a short lowercase name, e.g. "notes-app" (means notes-app/research). ' +
+  'If the user names an idea ("an idea called X", "new idea X", "save this as X"), that name IS the branch: ' +
+  "never put a new idea into an existing one. Omit only to continue the current idea.";
 
 export const TOOLS: ToolDef[] = [
   {
@@ -431,8 +433,8 @@ const CHAT_PROTOCOL =
   'When I say "ctx spec", write the complete spec for what we discussed as markdown inside one fenced block opened with four backticks and the tag ctx-spec (````ctx-spec) and closed with four backticks, so code blocks inside it survive. Nothing else.\n';
 
 const USAGE =
-  "\nHow to use: to continue an idea, call ctx_pack with its name. To start a new idea, save to a new short name " +
-  '(e.g. branch "notes-app"). Save only when the user asks. When the user says "ctx spec", save the full spec with ' +
+  "\nHow to use: to continue an idea, call ctx_pack with its name. To start a new idea (the user names it, " +
+  'e.g. "an idea called X"), save with branch set to that name, never into the current idea. Save only when the user asks. When the user says "ctx spec", save the full spec with ' +
   'ctx_append (kind "decision", a one-line summary as text, the markdown in doc).\n';
 
 export function renderIndex(claims: LoggedClaim[], docs: LoggedDoc[], active: string): string {

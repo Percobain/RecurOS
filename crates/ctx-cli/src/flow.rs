@@ -23,6 +23,7 @@ pub fn new(home: &CtxHome, name: &str) -> Result<()> {
     let project = crate::slug(name);
     let mut app = App::open(home.clone(), None)?;
     let research = app.new_project(&project)?;
+    crate::sync_now(&mut app, false)?;
     println!("Started `{project}`. Research now goes to {research}.\n");
     println!("Where to do the research:");
     println!("  claude.ai / ChatGPT   with the ContextOS connector (worker/README.md), just talk;");

@@ -354,7 +354,7 @@ With no remote, everything still works locally. Offline is a normal state.
 | `ctx use <branch>` | Default branch outside a repo (for chat surfaces) |
 | `ctx branch new\|ls\|merge\|archive` | Manage branches |
 | `ctx review [accept\|reject]` | Handle claims agents proposed for other branches |
-| `ctx delete <c:xxxx \| idea \| idea/branch>` | Delete a claim, a branch or a whole idea (alias `ctx remove`). Gone everywhere, kept in history; asks before deleting more than one claim |
+| `ctx delete <c:xxxx \| idea \| idea/branch>` | Delete a claim, a branch or a whole idea (alias `ctx remove`). Gone everywhere (syncs to your chats right away; `--cloud` fails if it can't), kept in history; asks before deleting more than one claim |
 | `ctx rate <id> up\|down` | Feedback that affects ranking |
 | `ctx refine` | Find near-duplicates worth merging |
 | `ctx sync` | Commit, pull, push |

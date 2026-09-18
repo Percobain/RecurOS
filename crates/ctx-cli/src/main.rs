@@ -176,6 +176,10 @@ enum Command {
         /// Don't ask for confirmation.
         #[arg(short, long)]
         yes: bool,
+        /// Fail unless the delete also reaches the cloud (ChatGPT / claude.ai).
+        /// Without it, the delete still syncs, but only warns if it can't.
+        #[arg(long)]
+        cloud: bool,
     },
     /// Retire a claim (a status flip; nothing is ever deleted).
     #[command(hide = true)]
@@ -614,16 +618,22 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Use { branch } => {
             let mut app = open(&home)?;
-            let b = app.resolve_branch(Some(&branch))?;
+            // Outside a repo, a bare name is an idea: `ctx use habit` means
+            // habit/research, where chat research lives.
+            let name = branch.trim();
+            let b = if app.binding.is_none() && !name.contains('/') && name != BranchRef::DEFAULT {
+                BranchRef::new(&format!("{}/research", slug(name)))?
+            } else {
+                app.resolve_branch(Some(name))?
+            };
             let known = app.branches.contains(&b)
                 || app.store.branches()?.iter().any(|s| s.branch == b.as_str());
             app.set_active(&b)?;
             println!("active branch: {b}");
             if !known {
-                eprintln!(
-                    "note: `{b}` has no claims and isn't defined yet; `ctx branch new` defines it"
-                );
+                eprintln!("note: `{b}` has nothing saved yet; chats will start saving there");
             }
+            sync_now(&mut app, false)?;
         }
         Command::Status => status(&home)?,
         Command::Branch(cmd) => branch_cmd(&home, cmd)?,
@@ -642,7 +652,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 );
             }
         }
-        Command::Remove { target, yes } => remove(&home, &target, yes)?,
+        Command::Remove { target, yes, cloud } => remove(&home, &target, yes, cloud)?,
         Command::Archive { id, reason } => {
             let mut app = open(&home)?;
             let c = app.find_one(&id)?;
@@ -821,7 +831,33 @@ fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
-fn remove(home: &CtxHome, target: &str, yes: bool) -> Result<()> {
+/// Push a change that affects what chats see (delete, use, new) to the
+/// cloud right away. Saving stays offline; these don't, because a stale
+/// cloud makes ChatGPT and claude.ai write into the wrong idea. With
+/// `strict`, failing to reach the cloud is an error instead of a warning.
+pub(crate) fn sync_now(app: &mut App, strict: bool) -> Result<()> {
+    match app.sync() {
+        Ok(r) if r.remote.is_some() => {
+            println!("synced: ChatGPT and claude.ai see this now");
+            Ok(())
+        }
+        Ok(_) if strict => {
+            bail!("done on this machine, but there's no git remote, so the cloud can't see it")
+        }
+        Ok(_) => Ok(()), // local-only store: nothing to reach
+        Err(e) if strict => Err(e.context(
+            "done on this machine, but couldn't reach the cloud; run `ctx sync` when online",
+        )),
+        Err(e) => {
+            eprintln!(
+                "warning: couldn't sync ({e:#}); chats will see this after your next `ctx sync`"
+            );
+            Ok(())
+        }
+    }
+}
+
+fn remove(home: &CtxHome, target: &str, yes: bool, cloud: bool) -> Result<()> {
     let mut app = open(home)?;
     let t = target.trim();
     let is_claim = t.starts_with("c:")
@@ -890,9 +926,10 @@ fn remove(home: &CtxHome, target: &str, yes: bool) -> Result<()> {
         );
     }
     println!(
-        "gone from packs, search, AGENTS.md and your chats; still in the history (the log is never erased)"
+        "gone from packs, search and AGENTS.md; still in the history (the log is never erased)"
     );
     let _ = app.refresh_agents_md();
+    sync_now(&mut app, cloud)?;
     Ok(())
 }
 
