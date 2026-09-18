@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    # Golden CID tests must pass on all three: identical canonical bytes on
+    # every platform is the property everything else rests on.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --workspace
+      # Performance budgets (spec §15.1) are asserted against optimised code.
+      - run: cargo test --release -p ctx-pack --test packer pack_is_fast -- --nocapture
+      - run: cargo test --release -p ctx-app --test app reindex -- --nocapture
+
+  golden-reference:
+    # Re-derive the golden CIDs with the independent Python implementation so
+    # the literals in crates/ctx-core/tests/golden.rs can't silently drift.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install blake3
+      - run: python tests/golden/reference.py --check crates/ctx-core/tests/golden.rs
+
+  worker:
+    # The TypeScript port must produce the same CIDs as the Rust core.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+
+  extension:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax-check scripts and verify manifest references
+        working-directory: extension
+        run: |
+          for f in *.js tools/*.js; do node --check "$f"; done
+          node -e '
+            const fs = require("fs");
+            const m = JSON.parse(fs.readFileSync("manifest.json", "utf8"));
+            const files = [m.background.service_worker, m.action.default_popup, m.options_page,
+              ...Object.values(m.icons), ...m.content_scripts.flatMap(c => c.js)];
+            const missing = files.filter(f => !fs.existsSync(f));
+            if (missing.length) { console.error("missing:", missing); process.exit(1); }
+          '
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
