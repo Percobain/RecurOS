@@ -1,0 +1,32 @@
+[package]
+name = "ctx-cli"
+description = "The `ctx` command-line interface for ContextOS"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "ctx"
+path = "src/main.rs"
+
+[dependencies]
+ctx-core.workspace = true
+ctx-git.workspace = true
+ctx-branch.workspace = true
+ctx-pack.workspace = true
+ctx-app.workspace = true
+ctx-mcp.workspace = true
+ctx-daemon.workspace = true
+ctx-wire.workspace = true
+anyhow.workspace = true
+arboard.workspace = true
+chrono.workspace = true
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+ulid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

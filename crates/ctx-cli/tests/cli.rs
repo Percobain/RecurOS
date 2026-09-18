@@ -1,0 +1,157 @@
+//! End-to-end tests of the `ctx` binary, the way a user drives it.
+
+use std::io::Write;
+use std::path::Path;
+use std::process::{Command, Output, Stdio};
+
+fn ctx(home: &Path, cwd: &Path, args: &[&str]) -> Output {
+    Command::new(env!("CARGO_BIN_EXE_ctx"))
+        .args(args)
+        .current_dir(cwd)
+        .env("CTX_HOME", home)
+        .env("CTX_TOKEN_FILE", home.with_extension("token"))
+        .output()
+        .unwrap()
+}
+
+fn ok(o: &Output) -> String {
+    assert!(
+        o.status.success(),
+        "ctx failed: {}",
+        String::from_utf8_lossy(&o.stderr)
+    );
+    String::from_utf8(o.stdout.clone()).unwrap()
+}
+
+#[test]
+fn save_log_search_reindex_outside_a_project() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("ctx");
+    let cwd = dir.path();
+
+    let out = ok(&ctx(
+        &home,
+        cwd,
+        &[
+            "save",
+            "Covenant settlement",
+            "-k",
+            "rejected",
+            "-w",
+            "too slow",
+            "-t",
+            "Settlement",
+        ],
+    ));
+    assert!(out.starts_with("saved [c:"), "{out}");
+    let out = ok(&ctx(
+        &home,
+        cwd,
+        &[
+            "save",
+            "Covenant settlement  ",
+            "-k",
+            "rejected",
+            "-w",
+            "too slow",
+            "-t",
+            "settlement",
+        ],
+    ));
+    assert!(out.starts_with("already recorded as "), "{out}");
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ctx"))
+        .args(["save", "-", "-k", "question"])
+        .current_dir(cwd)
+        .env("CTX_HOME", &home)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"Is the peg fast enough?\r\n")
+        .unwrap();
+    assert!(child.wait_with_output().unwrap().status.success());
+
+    let log = ok(&ctx(&home, cwd, &["log"]));
+    assert_eq!(log.lines().count(), 2, "{log}");
+    assert!(log.contains("rejected    Covenant settlement"), "{log}");
+
+    let hits = ok(&ctx(&home, cwd, &["search", "peg", "-v"]));
+    assert!(hits.contains("Is the peg fast enough?"));
+    assert!(!hits.contains("Covenant"));
+
+    let out = ok(&ctx(&home, cwd, &["reindex"]));
+    assert!(out.starts_with("reindexed 2 claims from 1 shards"), "{out}");
+
+    let bad = ctx(&home, cwd, &["save", "  \n "]);
+    assert!(!bad.status.success());
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("empty"));
+}
+
+#[test]
+fn init_wires_a_repo_and_packs_follow_the_binding() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("ctx");
+    let repo = dir.path().join("Acme API");
+    std::fs::create_dir_all(repo.join(".git")).unwrap();
+    std::fs::write(repo.join("AGENTS.md"), "# Acme\n\nRun make test.\n").unwrap();
+
+    let out = ok(&ctx(&home, &repo, &["init", "--agents", "claude-code"]));
+    assert!(out.contains("ContextOS: acme-api/code"), "{out}");
+    assert!(repo.join(".ctx.yaml").exists());
+    assert!(repo.join(".mcp.json").exists());
+    assert_eq!(
+        std::fs::read_to_string(repo.join("CLAUDE.md")).unwrap(),
+        "@AGENTS.md\n"
+    );
+    // Idempotent.
+    ok(&ctx(&home, &repo, &["init", "--agents", "claude-code"]));
+
+    ok(&ctx(
+        &home,
+        &repo,
+        &["save", "Never block the event loop", "-k", "constraint"],
+    ));
+    ok(&ctx(
+        &home,
+        &repo,
+        &["save", "Webhooks retry for 3 days", "--to", "research"],
+    ));
+    let agents = std::fs::read_to_string(repo.join("AGENTS.md")).unwrap();
+    assert!(
+        agents.starts_with("# Acme\n\nRun make test.\n"),
+        "user content kept"
+    );
+    assert!(
+        agents.contains("Never block the event loop"),
+        "AGENTS.md refreshed on save"
+    );
+
+    // Kind not held by the branch: rejected with a suggestion.
+    let bad = ctx(
+        &home,
+        &repo,
+        &["save", "Webhooks are the future", "-k", "claim"],
+    );
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("--to acme-api/research"));
+
+    let handoff = ok(&ctx(&home, &repo, &["pack", "--for", "handoff"]));
+    assert!(handoff.starts_with("# Handoff: acme-api/code"), "{handoff}");
+    let research = ok(&ctx(&home, &repo, &["pack", "research"]));
+    assert!(research.contains("Webhooks retry for 3 days"));
+
+    let ls = ok(&ctx(&home, &repo, &["branch", "ls"]));
+    assert!(ls.contains("* acme-api/code"), "{ls}");
+    // The hook is silent when nothing changed, and never fails a session.
+    let hook = ctx(&home, &repo, &["hook", "session-start"]);
+    assert!(hook.status.success());
+    assert!(
+        hook.stdout.is_empty(),
+        "{}",
+        String::from_utf8_lossy(&hook.stdout)
+    );
+}
