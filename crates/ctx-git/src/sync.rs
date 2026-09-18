@@ -29,10 +29,11 @@ pub enum SyncError {
     #[error("git {0} timed out")]
     Timeout(String),
     #[error(
-        "pull could not be rebased cleanly, so another writer touched a shard this machine owns. \
-         The rebase was aborted and nothing was lost; inspect with `git -C {0} log --all --stat`"
+        "pull could not be rebased cleanly, so another writer touched a file this machine owns. \
+         The rebase was aborted and nothing was lost; inspect with `git -C {dir} log --all --stat`. \
+         git said: {detail}"
     )]
-    Conflict(String),
+    Conflict { dir: String, detail: String },
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -159,23 +160,31 @@ pub fn commit(home: &CtxHome, message: &str) -> Result<bool, SyncError> {
     if staged.ok {
         return Ok(false); // nothing to commit
     }
-    // Commit even if the user never configured an identity; the store is
-    // theirs, and a missing identity must not block saving history.
+    let mut args = identity_args(dir);
+    args.extend(["commit", "--quiet", "--no-verify", "-m", message]);
+    git_ok(dir, &args, None)?;
+    Ok(true)
+}
+
+/// Fallback identity for commands that create commits (commit, and the
+/// rebase inside pull) when the user never configured one. The store is
+/// theirs, and a missing identity must not block saving or syncing
+/// history. Without this, a rebase on a fresh machine fails half way and
+/// looks like a conflict.
+fn identity_args(dir: &Path) -> Vec<&'static str> {
     let has_identity = git_ok(dir, &["config", "user.email"], None)
         .map(|s| !s.trim().is_empty())
         .unwrap_or(false);
-    let mut args: Vec<&str> = Vec::new();
-    if !has_identity {
-        args.extend([
+    if has_identity {
+        Vec::new()
+    } else {
+        vec![
             "-c",
             "user.name=ContextOS",
             "-c",
             "user.email=ctx@localhost",
-        ]);
+        ]
     }
-    args.extend(["commit", "--quiet", "--no-verify", "-m", message]);
-    git_ok(dir, &args, None)?;
-    Ok(true)
 }
 
 /// Pull other machines' shards. Returns false (not an error) when there is
@@ -188,18 +197,16 @@ pub fn pull(home: &CtxHome, timeout: Option<Duration>) -> Result<bool, SyncError
         return Ok(false);
     };
     let branch = current_branch(home);
-    let out = git(
-        home.root(),
-        &[
-            "pull",
-            "--rebase",
-            "--autostash",
-            "--quiet",
-            &remote,
-            &branch,
-        ],
-        timeout,
-    )?;
+    let mut args = identity_args(home.root());
+    args.extend([
+        "pull",
+        "--rebase",
+        "--autostash",
+        "--quiet",
+        &remote,
+        &branch,
+    ]);
+    let out = git(home.root(), &args, timeout)?;
     if out.ok {
         return Ok(true);
     }
@@ -211,7 +218,10 @@ pub fn pull(home: &CtxHome, timeout: Option<Duration>) -> Result<bool, SyncError
         || home.root().join(".git/rebase-apply").exists()
     {
         let _ = git(home.root(), &["rebase", "--abort"], None);
-        return Err(SyncError::Conflict(home.root().display().to_string()));
+        return Err(SyncError::Conflict {
+            dir: home.root().display().to_string(),
+            detail: out.stderr.trim().to_owned(),
+        });
     }
     Err(SyncError::Git {
         args: format!("pull --rebase {remote} {branch}"),
