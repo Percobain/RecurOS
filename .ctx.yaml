@@ -1,0 +1,4 @@
+# ContextOS binding: which context branch this repo's agents use.
+# Commit this file. See `ctx --help`.
+project: contextos
+branch: code

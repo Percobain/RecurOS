@@ -1,2 +1,4 @@
 /target
 node_modules/
+# Per-user Claude Code settings (holds the ctx SessionStart hook)
+.claude/settings.local.json
