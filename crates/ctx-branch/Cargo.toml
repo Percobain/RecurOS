@@ -1,0 +1,16 @@
+[package]
+name = "ctx-branch"
+description = "Branch DAG, scoped inheritance and routing for ContextOS"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+ctx-core.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
