@@ -13,19 +13,22 @@ pub const TEMPLATES: [&str; 4] = ["research", "code", "gtm", "writing"];
 pub fn template(name: &str, parent: Option<&str>) -> Option<BranchDef> {
     let (holds, from_parent, budget, compile, binds): (&[Kind], &[Kind], u32, &str, &[&str]) =
         match name {
-            // Thinking space: everything except hard constraints, generous budget.
+            // Thinking space: every kind, generous budget. Constraints are
+            // included because research is where most are discovered (API
+            // limits, budgets, legal), and `code` inherits them from here.
             "research" => (
-                &[Fact, Question, Claim, Rejected, Decision],
+                &[Fact, Question, Claim, Rejected, Decision, Constraint],
                 &[Decision, Fact],
                 1200,
                 "dossier",
                 &[],
             ),
-            // Building: conclusions only. Inherits decisions and constraints,
+            // Building: conclusions only. Inherits decisions, constraints and
+            // rejected approaches (so the builder doesn't propose them again),
             // not the open-ended churn of research.
             "code" => (
                 &[Decision, Constraint, Rejected, Question, Fact],
-                &[Decision, Constraint],
+                &[Decision, Constraint, Rejected],
                 700,
                 "agents-md",
                 &["claude-code", "codex", "cursor", "gemini"],

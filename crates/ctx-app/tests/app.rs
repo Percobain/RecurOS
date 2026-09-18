@@ -11,6 +11,98 @@ use ctx_git::{CtxHome, shard};
 use ctx_pack::Projection;
 use ulid::Ulid;
 
+#[test]
+fn idea_to_build_flow_with_spec_versions() {
+    let (dir, home) = setup();
+    // 1. `ctx new`: research becomes the active branch for chat surfaces.
+    let mut app = App::open(home.clone(), None).unwrap();
+    let research = app.new_project("habit").unwrap();
+    assert_eq!(app.default_branch().unwrap(), research);
+    saved(
+        app.save(draft(
+            "habit/research",
+            Kind::Rejected,
+            "Gamified leaderboards",
+        ))
+        .unwrap(),
+    );
+
+    // 2. The research ends with a spec; saving the same body again is a no-op.
+    let v1 = app
+        .save_doc(
+            &research,
+            "spec",
+            None,
+            "# Habit v1\n\nStreaks.",
+            "claude.ai",
+        )
+        .unwrap();
+    assert!(!v1.duplicate);
+    assert_eq!(v1.doc.title, "Habit v1");
+    assert!(
+        app.save_doc(&research, "spec", None, "# Habit v1\n\nStreaks.\n", "cli")
+            .unwrap()
+            .duplicate
+    );
+    drop(app);
+
+    // 3. `ctx build`: a repo bound to habit/code finds the research spec.
+    let repo = dir.path().join("habit");
+    std::fs::create_dir_all(&repo).unwrap();
+    Binding {
+        project: "habit".into(),
+        branch: "code".into(),
+        root: repo.clone(),
+    }
+    .write(&repo)
+    .unwrap();
+    let mut app = App::open(home.clone(), Some(&repo)).unwrap();
+    assert_eq!(app.refresh_spec_file().unwrap(), ctx_app::SpecFile::Written);
+    let spec = std::fs::read_to_string(repo.join("SPEC.md")).unwrap();
+    assert!(spec.starts_with("<!-- ctx:doc name=spec cid=b3:"));
+    assert!(spec.ends_with("# Habit v1\n\nStreaks.\n"));
+    let pack = app.pack(&PackOpts::default()).unwrap().markdown;
+    assert!(pack.contains("read it in `SPEC.md`"), "{pack}");
+    assert!(
+        pack.contains("Gamified leaderboards"),
+        "code inherits rejected: {pack}"
+    );
+    assert_eq!(
+        app.refresh_spec_file().unwrap(),
+        ctx_app::SpecFile::Unchanged
+    );
+
+    // 4. A new version replaces an untouched SPEC.md...
+    app.save_doc(&research, "spec", None, "# Habit v2", "chatgpt")
+        .unwrap();
+    assert_eq!(app.refresh_spec_file().unwrap(), ctx_app::SpecFile::Written);
+    // ...but a hand-edited one is left alone.
+    let edited = std::fs::read_to_string(repo.join("SPEC.md")).unwrap() + "\nmy notes\n";
+    std::fs::write(repo.join("SPEC.md"), &edited).unwrap();
+    app.save_doc(&research, "spec", None, "# Habit v3", "cli")
+        .unwrap();
+    assert_eq!(
+        app.refresh_spec_file().unwrap(),
+        ctx_app::SpecFile::LeftAlone
+    );
+    assert_eq!(
+        std::fs::read_to_string(repo.join("SPEC.md")).unwrap(),
+        edited
+    );
+
+    // Every version stays in the log; the index survives being thrown away.
+    drop(app);
+    std::fs::remove_dir_all(home.cache_dir()).unwrap();
+    let app = App::open(home, Some(&repo)).unwrap();
+    assert_eq!(
+        app.find_doc(&b("habit/code"), "spec")
+            .unwrap()
+            .unwrap()
+            .body,
+        "# Habit v3"
+    );
+}
+
 fn setup() -> (tempfile::TempDir, CtxHome) {
     let dir = tempfile::tempdir().unwrap();
     let home = CtxHome::at(dir.path().join("ctx"));

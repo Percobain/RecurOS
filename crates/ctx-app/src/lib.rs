@@ -7,6 +7,7 @@
 
 pub mod agents_md;
 pub mod claims_block;
+pub mod docs;
 
 use std::collections::{BTreeSet, HashMap};
 use std::fs;
@@ -26,6 +27,7 @@ use ctx_store_sqlite::SqliteStore;
 use ulid::Ulid;
 
 pub use claims_block::ClaimInput;
+pub use docs::{DocSaved, SPEC, SPEC_FILE, SpecFile};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -406,10 +408,11 @@ impl App {
             def.inherits.insert(from.clone(), kinds.clone());
         }
         if parent_name.is_some() && !def.inherits.keys().any(|k| Some(k) == parent_name.as_ref()) {
-            // Default ancestor scope: conclusions only.
+            // Default ancestor scope: conclusions only (what was decided,
+            // what must hold, and what was ruled out).
             def.inherits.insert(
                 parent_name.clone().unwrap_or_default(),
-                vec![Kind::Decision, Kind::Constraint],
+                vec![Kind::Decision, Kind::Constraint, Kind::Rejected],
             );
         }
         self.branches.insert(branch, def)?;
@@ -586,6 +589,7 @@ impl App {
             weights: &self.weights,
             generation: self.store.generation()?,
             version: VERSION,
+            docs: &self.doc_refs(&branch)?,
         }))
     }
 
