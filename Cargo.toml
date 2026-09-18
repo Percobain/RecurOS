@@ -1,0 +1,48 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+rust-version = "1.89"
+
+[workspace.dependencies]
+ctx-core = { path = "crates/ctx-core" }
+ctx-store-sqlite = { path = "crates/ctx-store-sqlite" }
+ctx-git = { path = "crates/ctx-git" }
+ctx-branch = { path = "crates/ctx-branch" }
+ctx-pack = { path = "crates/ctx-pack" }
+ctx-app = { path = "crates/ctx-app" }
+ctx-mcp = { path = "crates/ctx-mcp" }
+ctx-daemon = { path = "crates/ctx-daemon" }
+ctx-wire = { path = "crates/ctx-wire" }
+
+anyhow = "1"
+arboard = "3"
+axum = "0.8"
+getrandom = "0.3"
+http-body-util = "0.1"
+tokio = { version = "1", features = ["rt", "net", "macros", "signal", "time"] }
+tower = { version = "0.5", features = ["util"] }
+blake3 = "1"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+gethostname = "1"
+clap = { version = "4", features = ["derive"] }
+rusqlite = { version = "0.37", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+tempfile = "3"
+thiserror = "2"
+ulid = { version = "1", features = ["serde"] }
+unicode-normalization = "0.1"
+
+[profile.dev]
+opt-level = 0
+
+# Keep dependencies optimised even in dev: SQLite and BLAKE3 are painfully
+# slow at opt-level 0 and we don't need to debug them.
+[profile.dev.package."*"]
+opt-level = 2

@@ -1,0 +1,3 @@
+* text=auto eol=lf
+# Golden fixtures must be byte-exact on every platform.
+tests/golden/** -text
