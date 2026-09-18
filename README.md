@@ -39,6 +39,7 @@ saved [c:5270] rejected -> acme-api/code
 - [5-minute quickstart](#5-minute-quickstart)
 - [The ideas, in one page](#the-ideas-in-one-page)
 - [Using it every day](#using-it-every-day)
+- [From idea to code](#from-idea-to-code)
 - [Every surface, one memory](#every-surface-one-memory)
 - [Sync across machines](#sync-across-machines)
 - [Command reference](#command-reference)
@@ -226,6 +227,44 @@ Anything that takes an id accepts the short `c:xxxx` tag shown in packs and logs
 
 ---
 
+## From idea to code
+
+The flow ContextOS is built around: you have an idea in ChatGPT or claude.ai, research it there, end with a spec, and hand it to a coding agent, without ever copying context between tools.
+
+```sh
+ctx new habit-tracker
+```
+
+That creates the project and points your chat tools at its research branch. Now research in claude.ai or ChatGPT (with the [connector](worker/README.md), the [extension](extension/README.md), or the clipboard). Say **"save that"** whenever something is worth keeping. When the research is done, say **"ctx spec"**, and the chat writes the full spec and saves it to the project.
+
+```sh
+ctx build habit-tracker
+cd habit-tracker && claude
+```
+
+`ctx build` pulls the latest research, creates the repo, and writes `SPEC.md` (the spec), `AGENTS.md` (the decisions, constraints and rejected ideas from research) and your agent's configuration. Tell the agent "Build this from SPEC.md". If you later refine the spec in the chat, the next session updates `SPEC.md` and tells the agent to re-read it (it never overwrites your own edits).
+
+See the whole project at a glance with `ctx map > MAP.md`, a "metro map" where each branch is a line and each claim a station, coloured by kind. It renders directly on GitHub:
+
+```mermaid
+flowchart LR
+  subgraph b1["habit-tracker/research"]
+    direction LR
+    n0["fact: Users quit habit apps after ~2 weeks"]:::fact --- n1["decision: Offline-first, sync later"]:::decision --- n2["rejected: Gamified leaderboards"]:::rejected
+  end
+  subgraph b0["habit-tracker/code"]
+    direction LR
+    n3["constraint: Works with no network"]:::constraint
+  end
+  b1 -. "decision, constraint, rejected" .-> b0
+  classDef decision fill:#dbeafe,stroke:#1d4ed8,color:#0b1b3a
+  classDef constraint fill:#ffedd5,stroke:#c2410c,color:#3a1a05
+  classDef rejected fill:#fee2e2,stroke:#b91c1c,color:#3a0b0b
+  classDef fact fill:#f1f5f9,stroke:#475569,color:#0f172a
+```
+
+---
+
 ## Every surface, one memory
 
 ### Coding agents (Claude Code, Codex, Cursor, Gemini CLI)
@@ -301,6 +340,10 @@ With no remote, everything still works locally. Offline is a normal state.
 
 | Command | What it does |
 |---|---|
+| `ctx new <idea>` | Start an idea: creates its research and code branches and points chat tools at research |
+| `ctx build <idea>` | Hand an idea to a coding agent: new repo with `SPEC.md`, `AGENTS.md` and agent configs |
+| `ctx spec save\|show\|ls` | Save a spec from a file, stdin or `--paste`; print or list documents |
+| `ctx map [project]` | Draw the project as a Mermaid metro map (`--out MAP.md`) |
 | `ctx init` | Wire the current repo: `.ctx.yaml`, `AGENTS.md`, agent configs. Idempotent. |
 | `ctx save "<text>"` | Record a claim. `-k kind`, `-w why`, `-r refs`, `-t tags`, `--to branch`, `--supersedes id`, `--paste` |
 | `ctx pack [branch]` | Compile context. `--task`, `--budget`, `--for agents-md\|dossier\|handoff\|markdown`, `--clip`, `--out FILE` |
@@ -407,3 +450,7 @@ cd worker && npm ci && npm test # Cloudflare Worker
 | `crates/ctx-app` | operations shared by CLI, MCP and daemon |
 | `crates/ctx-mcp`, `ctx-daemon`, `ctx-wire`, `ctx-cli` | the surfaces |
 | `worker/`, `extension/` | Cloudflare Worker, Chrome extension |
+
+## License
+
+[Apache-2.0](LICENSE).
