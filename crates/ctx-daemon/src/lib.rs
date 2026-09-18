@@ -248,19 +248,92 @@ async fn claims(
     }
     with_app(&s, |app| {
         let branch = app.resolve_branch(body.branch.as_deref())?;
-        let src = body
-            .src
-            .as_deref()
-            .map(|s| {
-                s.chars()
-                    .filter(|c| c.is_ascii_alphanumeric() || ".-_".contains(*c))
-                    .take(40)
-                    .collect()
-            })
-            .filter(|s: &String| !s.is_empty())
-            .unwrap_or_else(|| "browser".to_owned());
+        let src = clean_src(body.src.as_deref());
         let report = app.save_inputs(&body.claims, &branch, &src);
         Ok(Json(serde_json::to_value(report)?))
+    })
+}
+
+fn clean_src(src: Option<&str>) -> String {
+    src.map(|s| {
+        s.chars()
+            .filter(|c| c.is_ascii_alphanumeric() || ".-_".contains(*c))
+            .take(40)
+            .collect::<String>()
+    })
+    .filter(|s| !s.is_empty())
+    .unwrap_or_else(|| "browser".to_owned())
+}
+
+#[derive(Deserialize)]
+struct DocBody {
+    branch: Option<String>,
+    name: Option<String>,
+    title: Option<String>,
+    body: String,
+    src: Option<String>,
+}
+
+/// Save a spec (or any named document) captured from a chat surface.
+async fn save_doc(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Json(d): Json<DocBody>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    authorize(&s, &headers)?;
+    if d.body.len() > 2_000_000 {
+        return Err(err(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "documents are limited to 2 MB",
+        ));
+    }
+    with_app(&s, |app| {
+        let branch = app.resolve_branch(d.branch.as_deref())?;
+        let saved = app.save_doc(
+            &branch,
+            d.name.as_deref().unwrap_or(ctx_app::SPEC),
+            d.title.as_deref(),
+            &d.body,
+            &clean_src(d.src.as_deref()),
+        )?;
+        Ok(Json(json!({
+            "id": saved.doc.id.to_string(),
+            "cid": saved.doc.cid,
+            "name": saved.doc.name,
+            "branch": saved.doc.branch.to_string(),
+            "title": saved.doc.title,
+            "duplicate": saved.duplicate,
+        })))
+    })
+}
+
+#[derive(Deserialize)]
+struct DocsQuery {
+    branch: Option<String>,
+}
+
+async fn list_docs(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<DocsQuery>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    authorize(&s, &headers)?;
+    with_app(&s, |app| {
+        let branch = app.resolve_branch(q.branch.as_deref())?;
+        let docs: Vec<serde_json::Value> = app
+            .visible_docs(&branch)?
+            .into_iter()
+            .map(|d| {
+                json!({
+                    "name": d.name,
+                    "title": d.title,
+                    "branch": d.branch.to_string(),
+                    "tokens": ctx_core::tokens::estimate(&d.body),
+                    "t_tx": d.t_tx,
+                })
+            })
+            .collect();
+        Ok(Json(json!({"docs": docs})))
     })
 }
 
@@ -276,6 +349,7 @@ pub fn router(app: App, token: String) -> Router {
         .route("/v1/pack", get(pack))
         .route("/v1/search", get(search))
         .route("/v1/claims", post(claims))
+        .route("/v1/docs", get(list_docs).post(save_doc))
         .with_state(state)
 }
 
@@ -386,6 +460,18 @@ mod tests {
 
         let (_, found) = send(&r, authed("GET", "/v1/search?q=peg", Body::empty())).await;
         assert!(found.contains("Use a peg"));
+        let spec = r##"{"src":"claude.ai","body":"# Peg SDK\n\nBuild the Python SDK first."}"##;
+        let (st, out) = send(&r, authed("POST", "/v1/docs", Body::from(spec))).await;
+        assert_eq!(st, StatusCode::OK, "{out}");
+        assert!(
+            out.contains("\"duplicate\":false") && out.contains("\"title\":\"Peg SDK\""),
+            "{out}"
+        );
+        let (_, again) = send(&r, authed("POST", "/v1/docs", Body::from(spec))).await;
+        assert!(again.contains("\"duplicate\":true"), "{again}");
+        let (_, list) = send(&r, authed("GET", "/v1/docs", Body::empty())).await;
+        assert!(list.contains("\"name\":\"spec\""), "{list}");
+
         let (_, b) = send(&r, authed("GET", "/v1/branches", Body::empty())).await;
         assert!(b.contains("\"active\":\"default\""), "{b}");
     }

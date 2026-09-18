@@ -43,7 +43,8 @@ fn tools() -> Value {
             "inputSchema": {"type": "object", "properties": {
                 "branch": {"type": "string", "description": "Defaults to the current branch."},
                 "task": {"type": "string"},
-                "budget": {"type": "integer", "description": "Max tokens."}
+                "budget": {"type": "integer", "description": "Max tokens."},
+                "doc": {"type": "string", "description": "Return this document instead, e.g. \"spec\"."}
             }}
         },
         {
@@ -56,13 +57,15 @@ fn tools() -> Value {
         },
         {
             "name": "ctx_append",
-            "description": "Record a claim. Only when the user asks you to save something.",
+            "description": "Record a claim, only when the user asks. To save a spec: kind decision, a one-line summary as text, the full markdown in doc.",
             "inputSchema": {"type": "object", "properties": {
                 "branch": {"type": "string", "description": "Defaults to the current branch."},
                 "kind": kind,
-                "text": {"type": "string", "description": "What is true or was decided."},
-                "why": {"type": "string", "description": "The reason."},
-                "refs": {"type": "array", "items": {"type": "string"}, "description": "Paths, URLs, repo@sha."}
+                "text": {"type": "string"},
+                "why": {"type": "string"},
+                "refs": {"type": "array", "items": {"type": "string"}, "description": "Paths, URLs, repo@sha."},
+                "doc": {"type": "string", "description": "Full markdown document to attach."},
+                "doc_name": {"type": "string"}
             }, "required": ["kind", "text"]}
         },
         {
@@ -102,6 +105,27 @@ pub fn call_tool(app: &mut App, name: &str, args: &Value) -> Result<ToolOutput> 
     match name {
         "ctx_index" => read(app.index()?),
         "ctx_pack" => {
+            if let Some(name) = str_arg(args, "doc") {
+                let branch = app.resolve_branch(str_arg(args, "branch"))?;
+                return read(match app.find_doc(&branch, name)? {
+                    Some(d) => format!("# {}\n\n{}\n", d.title, d.body),
+                    None => {
+                        let names: Vec<String> = app
+                            .visible_docs(&branch)?
+                            .into_iter()
+                            .map(|d| d.name)
+                            .collect();
+                        format!(
+                            "No document `{name}` for {branch}. Available: {}",
+                            if names.is_empty() {
+                                "none".to_owned()
+                            } else {
+                                names.join(", ")
+                            }
+                        )
+                    }
+                });
+            }
             let budget = args
                 .get("budget")
                 .and_then(Value::as_u64)
@@ -172,6 +196,24 @@ pub fn call_tool(app: &mut App, name: &str, args: &Value) -> Result<ToolOutput> 
                 })
                 .unwrap_or_default();
             d.src = std::env::var("CTX_SRC").unwrap_or_else(|_| "mcp".into());
+            // A spec or other long document travels with the claim that
+            // summarises it; the claim points at it with a `doc:<name>` ref.
+            let mut doc_note = String::new();
+            let mut wrote_doc = false;
+            if !propose && let Some(body) = str_arg(args, "doc") {
+                let name = str_arg(args, "doc_name").unwrap_or(ctx_app::SPEC);
+                let saved = app.save_doc(&d.branch, name, None, body, &d.src)?;
+                wrote_doc = !saved.duplicate;
+                d.refs.push(format!("doc:{}", saved.doc.name));
+                doc_note = if saved.duplicate {
+                    format!(" Document `{}` unchanged.", saved.doc.name)
+                } else {
+                    format!(
+                        " Document `{}` saved (\"{}\").",
+                        saved.doc.name, saved.doc.title
+                    )
+                };
+            }
             let outcome = if propose {
                 app.propose(d)?
             } else {
@@ -186,7 +228,8 @@ pub fn call_tool(app: &mut App, name: &str, args: &Value) -> Result<ToolOutput> 
                 SaveOutcome::Saved(c) => format!("Saved [c:{}] to {}.", c.short_cid(), c.branch),
                 SaveOutcome::Duplicate(c) => format!("Already recorded as [c:{}].", c.short_cid()),
             };
-            let wrote = matches!(outcome, SaveOutcome::Saved(_));
+            let text = text + &doc_note;
+            let wrote = wrote_doc || matches!(outcome, SaveOutcome::Saved(_));
             if wrote && !propose {
                 // Keep the repo's AGENTS.md floor current for the next session.
                 let _ = app.refresh_agents_md();
