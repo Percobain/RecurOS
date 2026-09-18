@@ -177,6 +177,10 @@ pub fn read_from(home: &CtxHome, rel: &str, offset: u64) -> Result<ReadOutcome, 
             continue;
         }
         match serde_json::from_slice::<Record>(line) {
+            Ok(Record::Doc(d)) if !d.verify_cid() => out.warnings.push(format!(
+                "{rel}: document {} at byte {line_offset} does not match its cid (edited by hand?); skipped",
+                d.id
+            )),
             Ok(Record::Claim(c)) if !c.verify_cid() => out.warnings.push(format!(
                 "{rel}: claim {} at byte {line_offset} does not match its cid (edited by hand?); skipped",
                 c.id

@@ -16,5 +16,5 @@ pub mod tokens;
 pub use canonical::{CanonicalContent, canonical_bytes, cid};
 pub use claim::{BranchRef, Claim, ClaimDraft, Confidence, Kind, Status};
 pub use error::CoreError;
-pub use record::{CounterUpdate, Record, StatusChange};
+pub use record::{CounterUpdate, Doc, Record, StatusChange};
 pub use store::{BranchSummary, Filter, Stats, Store};

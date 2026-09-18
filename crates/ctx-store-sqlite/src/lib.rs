@@ -16,8 +16,8 @@ use std::path::Path;
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use ctx_core::{
-    BranchRef, BranchSummary, Claim, CounterUpdate, Filter, Record, Stats, Status, StatusChange,
-    Store,
+    BranchRef, BranchSummary, Claim, CounterUpdate, Doc, Filter, Record, Stats, Status,
+    StatusChange, Store,
 };
 use rusqlite::types::Value;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -25,7 +25,7 @@ use thiserror::Error;
 use ulid::Ulid;
 
 /// Bump whenever the schema changes; a mismatch triggers a full rebuild.
-const SCHEMA_VERSION: i64 = 2;
+const SCHEMA_VERSION: i64 = 3;
 
 const SCHEMA: &str = "
 CREATE TABLE claims (
@@ -63,6 +63,14 @@ CREATE TABLE counters (
   PRIMARY KEY (claim, machine)
 );
 
+-- Long-form documents (specs). Every version is kept; the newest id per
+-- (branch, name) is current.
+CREATE TABLE docs (
+  id TEXT PRIMARY KEY, branch TEXT NOT NULL, name TEXT NOT NULL, title TEXT NOT NULL,
+  body TEXT NOT NULL, cid TEXT NOT NULL, src TEXT NOT NULL, t_tx TEXT NOT NULL
+);
+CREATE INDEX idx_docs_branch_name ON docs(branch, name, id);
+
 CREATE TABLE cursors (shard TEXT PRIMARY KEY, offset INTEGER NOT NULL);
 ";
 
@@ -72,6 +80,7 @@ DROP TABLE IF EXISTS claims;
 DROP TABLE IF EXISTS edges;
 DROP TABLE IF EXISTS status_changes;
 DROP TABLE IF EXISTS counters;
+DROP TABLE IF EXISTS docs;
 DROP TABLE IF EXISTS cursors;
 ";
 
@@ -260,6 +269,64 @@ fn insert_status(tx: &Transaction, s: &StatusChange) -> Result<(), SqliteError> 
     refresh_status(tx, &s.claim.to_string())
 }
 
+fn insert_doc(tx: &Transaction, d: &Doc) -> Result<(), SqliteError> {
+    tx.prepare_cached(
+        "INSERT OR IGNORE INTO docs(id, branch, name, title, body, cid, src, t_tx)
+         VALUES (?,?,?,?,?,?,?,?)",
+    )?
+    .execute(params![
+        d.id.to_string(),
+        d.branch.as_str(),
+        d.name,
+        d.title,
+        d.body,
+        d.cid,
+        d.src,
+        ts(d.t_tx),
+    ])?;
+    Ok(())
+}
+
+/// A `docs` row: id, branch, name, title, body, cid, src, t_tx.
+type DocRow = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+);
+
+fn row_to_doc(r: &rusqlite::Row) -> rusqlite::Result<DocRow> {
+    Ok((
+        r.get(0)?,
+        r.get(1)?,
+        r.get(2)?,
+        r.get(3)?,
+        r.get(4)?,
+        r.get(5)?,
+        r.get(6)?,
+        r.get(7)?,
+    ))
+}
+
+fn to_doc((id, branch, name, title, body, cid, src, t): DocRow) -> Option<Doc> {
+    Some(Doc {
+        id: Ulid::from_string(&id).ok()?,
+        branch: BranchRef::new(&branch).ok()?,
+        name,
+        title,
+        body,
+        cid,
+        src,
+        t_tx: DateTime::parse_from_rfc3339(&t).ok()?.with_timezone(&Utc),
+    })
+}
+
+const DOC_COLS: &str = "id, branch, name, title, body, cid, src, t_tx";
+
 fn insert_counter(tx: &Transaction, u: &CounterUpdate) -> Result<(), SqliteError> {
     // G-counter merge: per-machine max, independently for each field.
     tx.prepare_cached(
@@ -376,6 +443,7 @@ impl Store for SqliteStore {
                 Record::Claim(c) => insert_claim(&tx, c)?,
                 Record::Status(s) => insert_status(&tx, s)?,
                 Record::Counter(u) => insert_counter(&tx, u)?,
+                Record::Doc(d) => insert_doc(&tx, d)?,
             }
         }
         tx.execute(
@@ -538,11 +606,37 @@ impl Store for SqliteStore {
             "SELECT max(m) FROM (
                SELECT max(id) AS m FROM claims
                UNION ALL SELECT max(id) FROM status_changes WHERE id NOT LIKE 'sup:%'
-               UNION ALL SELECT max(rec_id) FROM counters)",
+               UNION ALL SELECT max(rec_id) FROM counters
+               UNION ALL SELECT max(id) FROM docs)",
             [],
             |r| r.get(0),
         )?;
         Ok(max.and_then(|s| Ulid::from_string(&s).ok()))
+    }
+
+    fn docs(&self, branch: Option<&BranchRef>) -> Result<Vec<Doc>, SqliteError> {
+        let sql = format!(
+            "SELECT {DOC_COLS} FROM docs d
+             WHERE id = (SELECT max(id) FROM docs WHERE branch = d.branch AND name = d.name)
+               AND (?1 IS NULL OR branch = ?1)
+             ORDER BY branch, name"
+        );
+        let mut stmt = self.conn.prepare_cached(&sql)?;
+        let rows = stmt
+            .query_map([branch.map(|b| b.as_str().to_owned())], row_to_doc)?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows.into_iter().filter_map(to_doc).collect())
+    }
+
+    fn doc(&self, branch: &BranchRef, name: &str) -> Result<Option<Doc>, SqliteError> {
+        let sql = format!(
+            "SELECT {DOC_COLS} FROM docs WHERE branch = ?1 AND name = ?2 ORDER BY id DESC LIMIT 1"
+        );
+        Ok(self
+            .conn
+            .query_row(&sql, params![branch.as_str(), name], row_to_doc)
+            .optional()?
+            .and_then(to_doc))
     }
 
     fn rebuild(&mut self) -> Result<(), SqliteError> {

@@ -14,7 +14,7 @@ use chrono::{DateTime, Utc};
 use ulid::Ulid;
 
 use crate::claim::{BranchRef, Claim, Kind, Status};
-use crate::record::{Record, StatusChange};
+use crate::record::{Doc, Record, StatusChange};
 
 /// Which claims a scan or search considers. Empty/`None` fields don't filter.
 #[derive(Debug, Clone, Default)]
@@ -84,6 +84,12 @@ pub trait Store {
 
     /// Largest record id seen: a cheap "generation" for the whole store.
     fn generation(&self) -> Result<Option<Ulid>, Self::Error>;
+
+    /// Current (newest) version of each document, optionally for one branch.
+    fn docs(&self, branch: Option<&BranchRef>) -> Result<Vec<Doc>, Self::Error>;
+
+    /// Current version of one document.
+    fn doc(&self, branch: &BranchRef, name: &str) -> Result<Option<Doc>, Self::Error>;
 
     /// Forget everything, including cursors, so the next catch-up re-reads
     /// the whole log.
