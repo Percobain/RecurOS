@@ -11,7 +11,7 @@
 //! arrive in any order — a transition read before its claim is simply applied
 //! when the claim shows up.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -194,7 +194,9 @@ fn ts(t: DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Nanos, true)
 }
 
-fn insert_claim(tx: &Transaction, c: &Claim) -> Result<(), SqliteError> {
+/// Returns true if the claim was new. Its status and counters are
+/// reconciled once per batch by `reconcile_late_records`.
+fn insert_claim(tx: &Transaction, c: &Claim) -> Result<bool, SqliteError> {
     let entities = c.entities.join(" ");
     let inserted = tx
         .prepare_cached(
@@ -222,7 +224,7 @@ fn insert_claim(tx: &Transaction, c: &Claim) -> Result<(), SqliteError> {
             serde_json::to_string(c)?,
         ])?;
     if inserted == 0 {
-        return Ok(()); // already indexed (duplicate line)
+        return Ok(false); // already indexed (duplicate line)
     }
     tx.prepare_cached("INSERT INTO claims_fts(rowid, text, why, entities) VALUES (?,?,?,?)")?
         .execute(params![tx.last_insert_rowid(), c.text, c.why, entities])?;
@@ -248,8 +250,35 @@ fn insert_claim(tx: &Transaction, c: &Claim) -> Result<(), SqliteError> {
                 .execute(params![c.id.to_string(), src])?;
         }
     }
-    refresh_status(tx, &c.id.to_string())?;
-    refresh_counters(tx, &c.id.to_string())?;
+    Ok(true)
+}
+
+/// Status and counter records can arrive before the claim they refer to
+/// (different shards are read in any order). Those claims were inserted
+/// with their base status, so fix them up here. Checking the small set of
+/// claims that have such records once per batch, instead of querying for
+/// every inserted claim, keeps a 10k-claim reindex several times faster.
+fn reconcile_late_records(tx: &Transaction, inserted: &[String]) -> Result<(), SqliteError> {
+    if inserted.is_empty() {
+        return Ok(());
+    }
+    let ids_in = |table: &str| -> Result<HashSet<String>, SqliteError> {
+        let mut stmt = tx.prepare_cached(&format!("SELECT DISTINCT claim FROM {table}"))?;
+        let ids = stmt
+            .query_map([], |r| r.get::<_, String>(0))?
+            .collect::<Result<HashSet<_>, _>>()?;
+        Ok(ids)
+    };
+    let with_status = ids_in("status_changes")?;
+    let with_counters = ids_in("counters")?;
+    for id in inserted {
+        if with_status.contains(id) {
+            refresh_status(tx, id)?;
+        }
+        if with_counters.contains(id) {
+            refresh_counters(tx, id)?;
+        }
+    }
     Ok(())
 }
 
@@ -438,14 +467,20 @@ impl Store for SqliteStore {
         next_offset: u64,
     ) -> Result<(), SqliteError> {
         let tx = self.conn.transaction()?;
+        let mut inserted: Vec<String> = Vec::new();
         for r in records {
             match r {
-                Record::Claim(c) => insert_claim(&tx, c)?,
+                Record::Claim(c) => {
+                    if insert_claim(&tx, c)? {
+                        inserted.push(c.id.to_string());
+                    }
+                }
                 Record::Status(s) => insert_status(&tx, s)?,
                 Record::Counter(u) => insert_counter(&tx, u)?,
                 Record::Doc(d) => insert_doc(&tx, d)?,
             }
         }
+        reconcile_late_records(&tx, &inserted)?;
         tx.execute(
             "INSERT INTO cursors(shard, offset) VALUES (?1, ?2)
              ON CONFLICT(shard) DO UPDATE SET offset = excluded.offset",
