@@ -16,7 +16,7 @@ use chrono::{DateTime, Utc};
 use ctx_core::{Claim, merkle, tokens};
 use ulid::Ulid;
 
-pub use render::{IndexEntry, Projection, UNLIMITED, render_index};
+pub use render::{DocRef, IndexEntry, Projection, UNLIMITED, render_index};
 pub use select::{Candidate, Params, WhyMode, rrf};
 pub use weights::Weights;
 
@@ -37,6 +37,8 @@ pub struct Request<'a> {
     pub weights: &'a Weights,
     pub generation: Option<Ulid>,
     pub version: &'a str,
+    /// Documents visible from the branch, listed (not inlined) in the pack.
+    pub docs: &'a [DocRef],
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -114,11 +116,13 @@ pub fn compile(req: &Request) -> Pack {
         claims.push(c);
     }
 
-    let meta = render::Meta {
+    let mut meta = render::Meta {
         branch: req.branch,
         version: req.version,
         generation: req.generation.map(|g| g.to_string()),
         budget: req.budget,
+        docs: req.docs,
+        compact: false,
     };
 
     // Fixed overhead (header, rules, section headings, footer) is charged up
@@ -175,6 +179,21 @@ pub fn compile(req: &Request) -> Pack {
             Some(k) if items[k].with_why => items[k].with_why = false,
             Some(k) => {
                 items.remove(k);
+            }
+            None if !meta.compact => {
+                // Even the fixed text (header, rules, protocol) doesn't fit:
+                // fall back to the bare form and start again with every
+                // selected claim.
+                meta.compact = true;
+                items = selection
+                    .picked
+                    .iter()
+                    .map(|p| render::Item {
+                        claim: claims[p.index],
+                        with_why: false,
+                        weight: cands[p.index].weight,
+                    })
+                    .collect();
             }
             None => {
                 let mut ids: Vec<Ulid> = items.iter().map(|i| i.claim.id).collect();

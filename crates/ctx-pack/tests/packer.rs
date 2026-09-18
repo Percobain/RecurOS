@@ -113,6 +113,7 @@ fn request<'a>(
         weights,
         generation: Some(Ulid::from_parts(1, 1)),
         version: "test",
+        docs: &[],
     }
 }
 

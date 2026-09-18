@@ -78,12 +78,28 @@ pub struct Item<'a> {
     pub weight: f64,
 }
 
+/// A document visible from the branch being packed. Documents are listed,
+/// never inlined: a spec is read whole, on demand, not squeezed into a
+/// budget next to claims.
+#[derive(Debug, Clone)]
+pub struct DocRef {
+    pub name: String,
+    pub title: String,
+    pub tokens: u32,
+    /// Where the reader can get the full text, e.g. "`SPEC.md`".
+    pub location: String,
+}
+
 pub struct Meta<'a> {
     pub branch: &'a str,
     pub version: &'a str,
     /// Newest record id in the store, for the footer.
     pub generation: Option<String>,
     pub budget: u32,
+    pub docs: &'a [DocRef],
+    /// Drop explanatory prose, the documents list and protocol text. Used
+    /// only when the budget is too small to fit them at all.
+    pub compact: bool,
 }
 
 const RULES: &str = "### Working with ctx
@@ -95,6 +111,7 @@ Cross-branch material: ctx_propose(target_branch, ...).
 
 const CLAIMS_PROTOCOL: &str = "---
 When I say \"ctx save\", reply with only one fenced code block tagged `ctx-claims` containing a JSON array of {\"kind\", \"text\", \"why\", \"refs\"} objects (kind is one of fact, decision, rejected, constraint, question, claim). Nothing else.
+When I say \"ctx spec\", write the complete spec for what we discussed as markdown inside one fenced block opened with four backticks and the tag ctx-spec (````ctx-spec) and closed with four backticks, so code blocks inside it survive. Nothing else.
 ";
 
 /// Section a claim belongs in, per projection: (order, title).
@@ -256,7 +273,22 @@ pub fn render_body(p: Projection, items: &[Item], meta: &Meta) -> String {
             .then_with(|| a.claim.id.cmp(&b.claim.id))
     });
 
-    let mut out = header(p, meta.branch);
+    let mut out = if meta.compact {
+        format!("# Context: {}\n\n", meta.branch)
+    } else {
+        header(p, meta.branch)
+    };
+    if !meta.docs.is_empty() && !meta.compact {
+        let _ = writeln!(out, "{} Documents\n", heading_level(p));
+        for d in meta.docs {
+            let _ = writeln!(
+                out,
+                "- `{}`: {} (~{} tokens, read it in {})",
+                d.name, d.title, d.tokens, d.location
+            );
+        }
+        out.push('\n');
+    }
     if sorted.is_empty() {
         out.push_str("_No claims recorded yet. Save one with `ctx save \"...\"`._\n\n");
     }
@@ -294,6 +326,7 @@ pub fn render_body(p: Projection, items: &[Item], meta: &Meta) -> String {
         }
     }
     match p {
+        _ if meta.compact => {}
         Projection::AgentsMd => out.push_str(&RULES.replace("{branch}", meta.branch)),
         Projection::Dossier => out.push_str(CLAIMS_PROTOCOL),
         _ => {}
