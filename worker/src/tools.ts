@@ -428,9 +428,27 @@ export function renderClaims(claims: LoggedClaim[]): string {
 
 const VISIBLE = new Set(["active", "superseded"]);
 
+// Everything the Worker serves goes to a chat that has the ContextOS tools,
+// so saving means calling a tool. The laptop's compiled dossiers end with the
+// copy-paste protocol (fenced ctx-claims / ctx-spec blocks) meant for chats
+// WITHOUT a connector; a connected model that follows it prints the spec
+// instead of saving it. So that protocol is swapped for this one.
 const CHAT_PROTOCOL =
-  '---\nWhen I say "ctx save", reply with only one fenced code block tagged `ctx-claims` containing a JSON array of {"kind", "text", "why", "refs"} objects (kind is one of fact, decision, rejected, constraint, question, claim). Nothing else.\n' +
-  'When I say "ctx spec", write the complete spec for what we discussed as markdown inside one fenced block opened with four backticks and the tag ctx-spec (````ctx-spec) and closed with four backticks, so code blocks inside it survive. Nothing else.\n';
+  "---\nYou have the ContextOS tools. When I say \"save\" or \"ctx save\", call ctx_append (one call per claim, with kind, text and why). " +
+  'When I say "ctx spec", write the complete spec for what we discussed as markdown and SAVE it: call ctx_append with kind "decision", ' +
+  "a one-line summary as text, and the full markdown in doc. Do not just print it. Then confirm in one line.\n";
+
+/** Replace the laptop pack's copy-paste save protocol with the connector one. */
+export function forConnector(pack: string): string {
+  const start = pack.indexOf('---\nWhen I say "ctx save"');
+  if (start < 0) return pack;
+  const specLine = pack.indexOf('When I say "ctx spec"', start);
+  const endMarker = "Nothing else.\n";
+  let end = pack.indexOf(endMarker, specLine >= 0 ? specLine : start);
+  if (end < 0) return pack;
+  end += endMarker.length;
+  return pack.slice(0, start) + CHAT_PROTOCOL + pack.slice(end);
+}
 
 const USAGE =
   "\nHow to use: to continue an idea, call ctx_pack with its name. To start a new idea (the user names it, " +
@@ -525,7 +543,7 @@ export async function callTool(env: Env, name: string, args: Record<string, unkn
       let out: string;
       if (f) {
         // Compiled on a laptop; add anything saved from a chat since then.
-        out = f.text;
+        out = forConnector(f.text);
         const fresh = unseenClaims(out, branch, claims);
         if (fresh.length) out += `\n\n## Saved since this pack was compiled\n\n${fresh.map(bullet).join("\n")}\n`;
       } else {

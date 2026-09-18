@@ -322,6 +322,20 @@ describe("cross-chat continuity (no laptop involved)", () => {
     expect((await call("ctx_pack", { branch: "gone", doc: "spec" })).text).toMatch(/No document named "spec"/);
   });
 
+  it("connected chats are told to save specs with the tool, not to print them", async () => {
+    // The tail the laptop's packer writes for chats without a connector.
+    const laptopProtocol =
+      '---\nWhen I say "ctx save", reply with only one fenced code block tagged `ctx-claims` containing a JSON array. Nothing else.\n' +
+      'When I say "ctx spec", write the complete spec inside one fenced block opened with four backticks and the tag ctx-spec. Nothing else.\n';
+    fakeGitHub({
+      "packs/idea/research.md": `# Context dossier: idea/research\n\n- x [c:0000]\n\n${laptopProtocol}<!-- ctx/1 b=idea/research -->\n`,
+    });
+    const r = await call("ctx_pack", { branch: "idea/research" });
+    expect(r.text).not.toMatch(/fenced block opened with four backticks/);
+    expect(r.text).toMatch(/SAVE it: call ctx_append with kind "decision".*full markdown in doc\. Do not just print it/);
+    expect(r.text).toMatch(/<!-- ctx\/1 b=idea\/research -->/);
+  });
+
   it("a compiled pack gets claims saved from chats since it was compiled", async () => {
     const old = buildClaim({ branch: "idea/research", kind: "fact", text: "Already compiled", status: "active" });
     const fresh = buildClaim({ branch: "idea/research", kind: "fact", text: "Saved from a chat later", status: "active" });
