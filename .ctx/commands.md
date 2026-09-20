@@ -36,8 +36,7 @@ RecurOS does. The user does not need to know these commands. Rules:
 | wire the current repo to an idea | `ctx init --project <idea>` |
 | fill an existing repo's context from its own code | `ctx onboard` (prints a prompt; follow it yourself) |
 | rename an idea, keeping its context | `ctx rename <old> <new>` |
-| see every idea and its size | `ctx list` (`-a` also shows deleted ones) |
-| delete a whole idea everywhere | `ctx delete <idea> --cloud` (ask first) |
+| see every idea and its size | `ctx list` |
 
 ## Sharing and viewing
 
