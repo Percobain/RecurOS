@@ -5,7 +5,7 @@ Compiled by RecurOS. These are settled; build on them.
 
 ### Documents
 
-- `protocol`: Habit Tracker v1 (~18 tokens, read it in `ctx spec show protocol` or ctx_pack(doc="protocol"))
+- `protocol`: RecurOS protocol (~11619 tokens, read it in `ctx spec show protocol` or ctx_pack(doc="protocol"))
 
 ### Constraints
 
@@ -40,5 +40,5 @@ Save only when I explicitly say so, plus one batched call at session end.
 Use ctx_append(kind, text, why, refs). Don't log progress or summaries.
 Cross-branch material: ctx_propose(target_branch, ...).
 For anything else RecurOS does (new idea, spec, build, delete, sync, map, handoff), run the `ctx` CLI yourself; commands are in `.ctx/commands.md` (or `ctx commands`). Ask before deleting.
-<!-- ctx/1 b=contextos/code n=18 t=618/700 root=b3:1369d593 gen=01M2V7DV v=0.1.0 -->
+<!-- ctx/1 b=contextos/code n=18 t=619/700 root=b3:1369d593 gen=01M2YNTF v=0.1.0 -->
 <!-- ctx:end -->

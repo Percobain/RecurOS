@@ -238,6 +238,59 @@ fn task_focuses_the_pack_and_why_pass_uses_leftover() {
 }
 
 #[test]
+fn coverage_cannot_outbid_the_task() {
+    // Coverage is a sum over a claim's tags, so a claim carrying several of
+    // them could score more than the relevance term is able to award any
+    // claim at all. A pack asked to focus on a task then came back looking
+    // almost exactly like one that had been asked nothing.
+    let t = Utc::now();
+    let branch = BranchRef::new("p/b").unwrap();
+    let long = |head: &str, filler: &str| format!("{head}. {}", format!("{filler} ").repeat(800));
+
+    let mut d = ClaimDraft::new(
+        Kind::Decision,
+        long("Pull with rebase, never fast forward only", "rebase"),
+    );
+    d.branch = branch.clone();
+    d.entities = vec!["sync".to_owned()];
+    let wanted = Claim::from_draft(d, Ulid::from_parts(t.timestamp_millis() as u64, 0), t).unwrap();
+
+    let mut d = ClaimDraft::new(Kind::Decision, long("The licence is Apache 2.0", "licence"));
+    d.branch = branch;
+    d.entities = ["licence", "legal", "release", "ci", "docs"]
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let tagged =
+        Claim::from_draft(d, Ulid::from_parts(t.timestamp_millis() as u64 + 1, 0), t).unwrap();
+
+    // Both are long enough that the budget has room for exactly one of them,
+    // so the pack's contents say which one the packer preferred.
+    let pool = vec![wanted.clone(), tagged.clone()];
+    let w = Weights::default();
+    // Room for the fixed text plus one of the two claims, and no more.
+    let budget = 2000;
+    assert!(wanted.tokens > 1000 && tagged.tokens > 1000 && wanted.tokens < 1600);
+
+    // What the retriever produces for a task about syncing: one strong hit,
+    // and a floor for everything it did not rank.
+    let rel = HashMap::from([(wanted.id, 1.0), (tagged.id, 0.02)]);
+    let pack = compile(&request(
+        &pool,
+        Some(&rel),
+        budget,
+        Projection::AgentsMd,
+        &w,
+    ));
+    assert_eq!(pack.claims, vec![wanted.id], "{}", pack.markdown);
+
+    // With no task both are equally relevant, and the one covering five tags
+    // is then genuinely the better pick.
+    let none = compile(&request(&pool, None, budget, Projection::AgentsMd, &w));
+    assert_eq!(none.claims, vec![tagged.id], "{}", none.markdown);
+}
+
+#[test]
 fn archived_claims_are_never_packed_and_superseded_are_labelled() {
     let mut pool = corpus(30, 9);
     for c in pool.iter_mut().take(10) {

@@ -186,14 +186,27 @@ impl<'a> State<'a> {
         }
     }
 
+    /// `cov(c, e)`, the value of `c` as the representative of feature `e`.
+    ///
+    /// Relevance belongs here and not only in the relevance term. Coverage is
+    /// a sum over a claim's tags, so a claim carrying four of them can score
+    /// four times what the relevance term can ever award, and a pack asked to
+    /// focus on a task came back looking almost exactly like one that had not
+    /// been asked anything. Covering the tags of claims nobody asked about is
+    /// not worth more than answering the question.
+    fn cov(c: &Candidate) -> f64 {
+        c.weight * c.relevance
+    }
+
     /// Δ(c | S) = F(S ∪ {c}) − F(S).
     fn gain(&mut self, i: usize) -> f64 {
         let c = &self.cands[i];
         let rel = self.params.alpha * c.relevance * c.weight;
+        let own = Self::cov(c);
         let cov: f64 = c
             .features
             .iter()
-            .map(|f| (c.weight - self.best_cov.get(f).copied().unwrap_or(0.0)).max(0.0))
+            .map(|f| (own - self.best_cov.get(f).copied().unwrap_or(0.0)).max(0.0))
             .sum();
         let (mut red, seen) = self.red[i];
         if seen < self.chosen.len() {
@@ -221,10 +234,11 @@ impl<'a> State<'a> {
 
     fn add(&mut self, i: usize) {
         let c = &self.cands[i];
+        let own = Self::cov(c);
         for f in &c.features {
             let e = self.best_cov.entry(*f).or_insert(0.0);
-            if c.weight > *e {
-                *e = c.weight;
+            if own > *e {
+                *e = own;
             }
         }
         self.chosen.push(i);

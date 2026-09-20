@@ -22,7 +22,7 @@ use ctx_core::{
     merkle,
 };
 use ctx_git::{CtxHome, shard, sync};
-use ctx_pack::{IndexEntry, Pack, Projection, Weights, rrf};
+use ctx_pack::{IndexEntry, Pack, Projection, Weights};
 use ctx_store_sqlite::SqliteStore;
 use ulid::Ulid;
 
@@ -38,10 +38,24 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Retrieval depth for task-focused packs (spec §8.3).
 const RETRIEVE_TOP: usize = 200;
 
-/// What an unretrieved claim is worth relative to the weakest retrieved one.
-/// Low enough that anything the search found wins, high enough that weight
-/// (a constraint, a pin, a recent decision) can still buy a place.
-const RELEVANCE_FLOOR: f64 = 0.2;
+/// What a claim the search did not rank is worth. Low enough that anything
+/// it did rank wins, high enough that weight (a constraint, a pin, a recent
+/// decision) can still buy a place with leftover budget.
+const RELEVANCE_FLOOR: f64 = 0.02;
+
+/// Ranks at which relevance halves.
+const RELEVANCE_HALF_LIFE: f64 = 8.0;
+
+/// Turn a position in the retrieved list into a score in (0, 1].
+///
+/// Fusion already happened in the store; what is left is giving one ordered
+/// list a usable scale. Reciprocal rank's own `1 / (60 + rank)` curve is far
+/// too flat for that: it puts the fortieth claim at a quarter of the first,
+/// a gap that a claim's weight alone can overturn, which is how a task ended
+/// up barely changing which claims were packed.
+fn relevance_at(rank: usize) -> f64 {
+    0.5_f64.powf(rank as f64 / RELEVANCE_HALF_LIFE)
+}
 
 /// How many of the best hits to expand from. Expanding the whole result would
 /// pull in the graph around claims that only matched a common word.
@@ -675,21 +689,23 @@ impl App {
                         .into_iter()
                         .filter(|id| in_pool.contains(id) && !known.contains(id)),
                 );
-                let mut scores = rrf(&[ranked]);
-                // A task narrows the pack; it must not empty it. Claims the
-                // search did not rank keep a floor well below the weakest
-                // match, so a constraint nobody happens to phrase the way
-                // this task phrases it can still be packed when there is
-                // budget left for it. With no match at all there is nothing
-                // to narrow by, so the task is ignored rather than obeyed
-                // into an almost empty pack.
-                if scores.is_empty() {
+                if ranked.is_empty() {
+                    // Nothing matched, so there is nothing to narrow by: pack
+                    // the branch as if no task had been given rather than
+                    // obeying the task into an almost empty pack.
                     None
                 } else {
-                    let floor =
-                        scores.values().copied().fold(f64::INFINITY, f64::min) * RELEVANCE_FLOOR;
+                    let mut scores: HashMap<Ulid, f64> = ranked
+                        .iter()
+                        .enumerate()
+                        .map(|(rank, id)| (*id, relevance_at(rank)))
+                        .collect();
+                    // A task narrows the pack; it must not empty it. Claims
+                    // the search did not rank keep a floor, so a constraint
+                    // nobody happens to phrase the way this task phrases it
+                    // can still be packed when there is budget left for it.
                     for c in &pool {
-                        scores.entry(c.id).or_insert(floor);
+                        scores.entry(c.id).or_insert(RELEVANCE_FLOOR);
                     }
                     Some(scores)
                 }
