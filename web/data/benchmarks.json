@@ -1,0 +1,38 @@
+{
+  "pack_tokens": 617,
+  "pack_claims": 19,
+  "prose": [
+    {
+      "file": "README.md",
+      "tokens": 5129
+    },
+    {
+      "file": "AGENTS.md",
+      "tokens": 639
+    },
+    {
+      "file": "docs/canonical.md",
+      "tokens": 4281
+    },
+    {
+      "file": "docs/protocol.md",
+      "tokens": 11619
+    }
+  ],
+  "prose_tokens": 21668,
+  "code_tokens": 92777,
+  "code_files": 35,
+  "question": "why do we pull with rebase instead of fast forward only",
+  "answer_tokens": 18,
+  "answer_source": "crates/ctx-git/src/sync.rs",
+  "answer_source_tokens": 2731,
+  "ms_startup": 24.2,
+  "ms_pack": 7.0,
+  "ms_search": 4.7,
+  "reindex": "reindexed 138 claims from 2 shards in 18ms",
+  "claims_indexed": 138,
+  "ms_reindex": 18,
+  "log_bytes": 215636,
+  "measured_at": "2026-09-20",
+  "platform": "Windows"
+}
