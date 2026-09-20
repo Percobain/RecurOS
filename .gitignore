@@ -2,3 +2,7 @@
 node_modules/
 # Per-user Claude Code settings (holds the ctx SessionStart hook)
 .claude/settings.local.json
+
+# Next.js build output (the site lives in web/)
+.next/
+node_modules/
