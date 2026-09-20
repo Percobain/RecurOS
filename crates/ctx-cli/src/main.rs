@@ -134,6 +134,9 @@ enum Command {
         limit: usize,
         #[arg(short, long)]
         verbose: bool,
+        /// Include claims you have deleted.
+        #[arg(long)]
+        all: bool,
     },
     /// Compile a branch's context into markdown.
     Pack {
@@ -171,6 +174,13 @@ enum Command {
     },
     /// Show one claim in full, with its history.
     Show { id: String },
+    /// Fill an existing project's context from its own code: prints a
+    /// prompt to hand to Claude Code, Cursor, Codex or Gemini CLI.
+    Onboard {
+        /// Copy it to the clipboard instead of printing it.
+        #[arg(long)]
+        clip: bool,
+    },
     /// Every idea you have context for, with its branches and sizes.
     #[command(visible_alias = "ls")]
     List {
@@ -571,6 +581,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
             kind,
             limit,
             verbose,
+            all,
         } => {
             let app = open(&home)?;
             let filter = Filter {
@@ -579,6 +590,19 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     .map(|b| app.resolve_branch(Some(b)))
                     .transpose()?,
                 kinds: kind.into_iter().map(Kind::from).collect(),
+                // Deleted claims stay in the log, and after a rename the log
+                // holds a retired copy of everything. Matching them by
+                // default would bury every hit under its own history.
+                statuses: if all {
+                    Vec::new()
+                } else {
+                    vec![
+                        Status::Active,
+                        Status::Proposed,
+                        Status::Superseded,
+                        Status::Rejected,
+                    ]
+                },
                 limit: Some(limit),
                 ..Default::default()
             };
@@ -682,6 +706,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 );
             }
         }
+        Command::Onboard { clip } => onboard(&home, clip)?,
         Command::List { all } => list(&home, all)?,
         Command::Rename { from, to, yes } => rename(&home, &from, &to, yes)?,
         Command::Remove { target, yes, cloud } => remove(&home, &target, yes, cloud)?,
@@ -887,6 +912,22 @@ pub(crate) fn sync_now(app: &mut App, strict: bool) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// `ctx onboard`: the prompt that fills this repo's context from this repo.
+fn onboard(home: &CtxHome, clip: bool) -> Result<()> {
+    let app = open(home)?;
+    let Some(binding) = &app.binding else {
+        bail!("this directory isn't wired yet. Run `ctx init` first");
+    };
+    let prompt = flow::onboard_prompt(&binding.root, &binding.branch_ref()?);
+    if clip {
+        clipboard::copy(&prompt)?;
+        println!("copied. Paste it into Claude Code, Cursor, Codex or Gemini CLI.");
+    } else {
+        print!("{prompt}");
+    }
+    Ok(())
 }
 
 /// `ctx list`: every idea, so you can see what to keep and what to delete.
@@ -1246,6 +1287,13 @@ fn init(
     }
 
     println!("\nNext:");
+    // An existing repository already holds most of its own context. Point at
+    // the command that gets it out, rather than at an empty store.
+    if BranchRef::new(&format!("{project}/{branch}"))
+        .is_ok_and(|b| app.pool(&b).is_ok_and(|p| p.is_empty()))
+    {
+        println!("  ctx onboard       # a prompt that fills this from your own code");
+    }
     println!("  ctx save \"Use SQLite, not Postgres\" -k decision -w \"no server to run\"");
     println!("  ctx pack          # see exactly what your agents will see");
     if ctx_git::sync::remote_url(home).is_none() {

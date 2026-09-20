@@ -34,6 +34,9 @@ RecurOS does. The user does not need to know these commands. Rules:
 | list documents | `ctx spec ls` |
 | turn an idea into a code repo | `ctx build <idea>` (creates `./<idea>` with `.ctx/SPEC.md` and `AGENTS.md`) |
 | wire the current repo to an idea | `ctx init --project <idea>` |
+| fill an existing repo's context from its own code | `ctx onboard` (prints a prompt; follow it yourself) |
+| rename an idea, keeping its context | `ctx rename <old> <new>` |
+| see every idea and its size | `ctx list` |
 
 ## Sharing and viewing
 

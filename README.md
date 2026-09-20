@@ -89,7 +89,13 @@ You need **git** and **Rust** (Rust is only needed to build `ctx`; nothing else)
 | Rust | [rustup.rs](https://rustup.rs) (on Windows, accept the defaults it suggests) |
 
 
-Then, in a terminal (PowerShell on Windows, Terminal on macOS/Linux):
+Then, in a terminal (PowerShell on Windows, Terminal on macOS/Linux), one line:
+
+```sh
+cargo install --git https://github.com/Percobain/RecurOS ctx-cli --locked
+```
+
+Or, if you'd rather have the source too:
 
 ```sh
 git clone https://github.com/Percobain/RecurOS.git
@@ -121,6 +127,21 @@ ctx init
 ```
 
 This connects the project to RecurOS and sets up Claude Code (and Cursor, Codex or Gemini CLI if you have them). **Restart Claude Code** in that folder, and it's ready.
+
+### Already have a project with a history?
+
+An existing codebase already holds most of its own context; it's just spread
+across the README, the docs and people's heads. One more command gets it out:
+
+```sh
+ctx onboard
+```
+
+It prints a prompt. Paste that into Claude Code (or Cursor, or Codex) in that
+same folder, and the agent reads your repo and records what it finds: why this
+database, what must never break, what was tried and abandoned. Then `ctx pack`
+shows you exactly what every AI will be told from now on, and you can delete
+anything you disagree with.
 
 From now on, just talk to Claude Code:
 
@@ -342,6 +363,17 @@ You never need to learn commands. Say these in ChatGPT, claude.ai or Claude Code
 "Chats" means ChatGPT and claude.ai with the RecurOS connector turned on. Claude Code can do everything, because it can run `ctx` itself.
 
 **The AI only saves when you ask.** It never fills your memory with chatter.
+
+### Housekeeping
+
+```sh
+ctx list                      # every idea, how big it is, which one this repo uses
+ctx rename old-name new-name  # keeps every claim, document and reason
+ctx delete <idea> --cloud     # gone from here, GitHub, ChatGPT and claude.ai
+```
+
+`ctx delete` never shreds anything: it hides it everywhere and keeps it in the
+log, so `ctx log --all` can still show you what used to be there.
 
 ### Terminal commands (if you like them)
 

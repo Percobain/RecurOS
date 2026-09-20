@@ -19,6 +19,81 @@ use ctx_core::{BranchRef, Claim, Filter, Status, Store};
 use ctx_git::CtxHome;
 
 /// `ctx new <idea>`
+/// Files worth naming in the prompt, in the order an engineer would read
+/// them. Only the ones that exist are mentioned, so the agent is not sent
+/// looking for a README that is not there.
+const ENTRY_POINTS: &[&str] = &[
+    "README.md",
+    "readme.md",
+    "docs/",
+    "ARCHITECTURE.md",
+    "CONTRIBUTING.md",
+    "Cargo.toml",
+    "package.json",
+    "pyproject.toml",
+    "go.mod",
+    "pom.xml",
+    "Gemfile",
+    "composer.json",
+    "Makefile",
+    "docker-compose.yml",
+];
+
+/// The prompt that fills an existing project's context from its own code.
+///
+/// RecurOS does not read repositories: the agent already in the repository
+/// does, and it is the one that knows which of what it read is worth
+/// keeping. So this hands that agent the job, in its own words, with the
+/// rules that keep a store worth reading.
+pub fn onboard_prompt(root: &Path, branch: &BranchRef) -> String {
+    // `exists` is case-insensitive on Windows and macOS, so README.md and
+    // readme.md both match one file. Name it once.
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let found: Vec<&str> = ENTRY_POINTS
+        .iter()
+        .copied()
+        .filter(|p| root.join(p.trim_end_matches('/')).exists())
+        .filter(|p| seen.insert(p.to_lowercase()))
+        .collect();
+    let start = if found.is_empty() {
+        "Start with the top-level directories and the build files.".to_owned()
+    } else {
+        format!("Start with {}.", join_and(&found))
+    };
+    format!(
+        "Read this repository and record the context a new engineer would need \
+in order to work on it. {start}
+
+Record the things the code cannot say for itself: why this database and not \
+another, what must never break, what was tried and abandoned, which \
+conventions are deliberate. Skip anything a reader can see by opening the \
+file.
+
+Save each one with the `ctx` command:
+
+  ctx save \"<one sentence, stated as true>\" -k <kind> -w \"<why>\" -r <file>
+
+where <kind> is decision, constraint, rejected or fact, `-w` is the reason \
+it holds, and `-r` is the file or directory it is about (repeat -r for \
+several). They go to {branch}.
+
+Rules:
+- One claim per fact, phrased so it is still true next month.
+- No progress notes, task lists, or summaries of what you did.
+- Do not guess. Ten claims you are sure of beat thirty you inferred.
+
+When you are done, run `ctx pack` to see what your agents will now be told.\n"
+    )
+}
+
+fn join_and(items: &[&str]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => (*one).to_owned(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+    }
+}
+
 pub fn new(home: &CtxHome, name: &str) -> Result<()> {
     let project = crate::slug(name);
     let mut app = App::open(home.clone(), None)?;
