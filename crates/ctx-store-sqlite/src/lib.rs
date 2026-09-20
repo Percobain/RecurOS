@@ -1270,12 +1270,11 @@ mod tests {
             s.search("is a the", &Filter::default()).unwrap().len() <= 2,
             "a query of only function words falls back to searching them"
         );
-        assert_eq!(
+        assert!(
             s.search("what is the sync about", &Filter::default())
                 .unwrap()[0]
                 .text
-                .starts_with("Sync"),
-            true
+                .starts_with("Sync")
         );
     }
 
