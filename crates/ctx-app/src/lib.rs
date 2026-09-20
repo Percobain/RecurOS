@@ -957,12 +957,12 @@ impl App {
                 branches.insert(s.branch);
             }
         }
-        for b in branches {
+        for b in &branches {
             // Browser surfaces get a generous budget regardless of the
             // branch's own (agent-sized) one: there the window, not cost, is
             // the constraint (spec §8.6).
             let pack = self.pack(&PackOpts {
-                branch: Some(b.clone()),
+                branch: Some(b.to_owned()),
                 projection: Some(Projection::Dossier),
                 budget: Some(Projection::Dossier.default_budget()),
                 ..Default::default()
@@ -970,7 +970,42 @@ impl App {
             written += write_if_changed(&dir.join(format!("{b}.md")), &pack.markdown)? as usize;
         }
         written += write_if_changed(&dir.join("index.md"), &self.index()?)? as usize;
+        // A pack is a rendering of the store, so a branch that is gone must
+        // not leave one behind. Without this a deleted idea stayed in the
+        // store's own packs/ directory, and in the git repository the chats
+        // read, long after it had stopped appearing anywhere else.
+        let wanted: BTreeSet<PathBuf> = branches
+            .iter()
+            .map(|b| dir.join(format!("{b}.md")))
+            .collect();
+        written += Self::prune_packs(&dir, &wanted)?;
         Ok(written)
+    }
+
+    /// Delete pack files for branches that no longer have one, and any
+    /// project directory left empty by that. Returns how many were removed.
+    fn prune_packs(dir: &Path, wanted: &BTreeSet<PathBuf>) -> Result<usize> {
+        if !dir.is_dir() {
+            return Ok(0);
+        }
+        let mut removed = 0;
+        for project in fs::read_dir(dir)? {
+            let project = project?.path();
+            if !project.is_dir() {
+                continue; // index.md, and anything else at the top level
+            }
+            for pack in fs::read_dir(&project)? {
+                let pack = pack?.path();
+                if pack.extension().is_some_and(|e| e == "md") && !wanted.contains(&pack) {
+                    fs::remove_file(&pack)?;
+                    removed += 1;
+                }
+            }
+            if fs::read_dir(&project)?.next().is_none() {
+                fs::remove_dir(&project)?;
+            }
+        }
+        Ok(removed)
     }
 
     /// Refresh packs, commit, pull (rebase), push. Offline is fine.

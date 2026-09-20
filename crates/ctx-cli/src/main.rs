@@ -930,7 +930,9 @@ fn onboard(home: &CtxHome, clip: bool) -> Result<()> {
     Ok(())
 }
 
-/// `ctx list`: every idea, so you can see what to keep and what to delete.
+/// `ctx list`: the ideas you still have, and what each one would cost to
+/// delete. Deleted ideas are names only, and only with `-a`: their branch
+/// breakdown is all zeroes and it buries the ideas you actually work on.
 fn list(home: &CtxHome, all: bool) -> Result<()> {
     let app = open(home)?;
     let active = app.active_ref();
@@ -945,6 +947,7 @@ fn list(home: &CtxHome, all: bool) -> Result<()> {
     for d in app.store.docs(None)? {
         names.insert(d.branch.to_string());
     }
+
     let mut projects: BTreeMap<String, Vec<(BranchRef, usize, usize, bool)>> = BTreeMap::new();
     for b in names
         .iter()
@@ -956,26 +959,33 @@ fn list(home: &CtxHome, all: bool) -> Result<()> {
         };
         let (claims, docs) = app.removal_counts(&b)?;
         let archived = app.branches.get(&b).is_some_and(|d| d.archived);
-        if archived && claims + docs == 0 && !all {
-            continue;
-        }
         projects
             .entry(project.to_owned())
             .or_default()
             .push((b, claims, docs, archived));
     }
-    if projects.is_empty() {
+
+    // An idea is gone when every branch of it is archived and nothing of it
+    // is still visible.
+    let (gone, live): (Vec<_>, Vec<_>) = projects.into_iter().partition(|(_, branches)| {
+        branches
+            .iter()
+            .all(|(_, claims, docs, archived)| *archived && claims + docs == 0)
+    });
+
+    if live.is_empty() && (gone.is_empty() || !all) {
         println!("no ideas yet. Start one with: ctx new \"<your idea>\"");
         return Ok(());
     }
-    let width = projects
-        .values()
-        .flatten()
+
+    let width = live
+        .iter()
+        .flat_map(|(_, bs)| bs)
         .map(|(b, ..)| b.as_str().len())
         .max()
         .unwrap_or(24)
         .clamp(24, 44);
-    for (project, branches) in &projects {
+    for (project, branches) in &live {
         let here = (bound.as_deref() == Some(project.as_str())).then_some("  (this repo)");
         let (claims, docs): (usize, usize) = branches
             .iter()
@@ -1005,17 +1015,31 @@ fn list(home: &CtxHome, all: bool) -> Result<()> {
                 plural(claims, "claim", "claims"),
                 plural(docs, "document version", "document versions")
             );
-        } else if branches.iter().all(|(_, _, _, archived)| *archived) {
-            println!("    already deleted");
         } else {
             println!("    empty:  ctx delete {project} --cloud");
         }
         println!();
     }
-    println!("Deleting hides it here, on GitHub, and in ChatGPT and claude.ai.");
-    println!("Nothing leaves the log: `ctx log --all` still shows it.");
-    if !all {
-        println!("Already-deleted ideas are hidden; `ctx list -a` shows them too.");
+
+    if !live.is_empty() {
+        println!("Deleting hides it here, on GitHub, and in ChatGPT and claude.ai.");
+        println!("Nothing leaves the log: `ctx log --all` still shows it.");
+    }
+    if !gone.is_empty() {
+        if all {
+            let names: Vec<&str> = gone.iter().map(|(p, _)| p.as_str()).collect();
+            println!(
+                "\n{}: {}",
+                plural(names.len(), "deleted idea", "deleted ideas"),
+                names.join(", ")
+            );
+            println!("Still in the log: `ctx log --all --branch <idea>/<lane>`.");
+        } else {
+            println!(
+                "{} hidden; `ctx list -a` names them.",
+                plural(gone.len(), "deleted idea", "deleted ideas")
+            );
+        }
     }
     Ok(())
 }
