@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
+import { Clarity } from "./clarity";
 import { Mark } from "@/lib/mark";
 
 export const metadata: Metadata = {
@@ -44,6 +46,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Link href="/docs/numbers">How the numbers were measured</Link>
           <span className="sep">Your context stays on your machine.</span>
         </footer>
+        <Analytics />
+        <Clarity />
       </body>
     </html>
   );

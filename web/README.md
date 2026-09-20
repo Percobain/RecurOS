@@ -25,6 +25,17 @@ npm run dev     # http://localhost:3000
 npm run build
 ```
 
+## Analytics
+
+Vercel Analytics needs nothing: it is on for the project in the Vercel
+dashboard and `<Analytics />` in the layout does the rest.
+
+Microsoft Clarity (session replay and heatmaps) reads its project id from
+`NEXT_PUBLIC_CLARITY_PROJECT_ID`. Set it in Vercel under Settings ->
+Environment Variables, for Production only. With no id set, or outside a
+production build, nothing loads and nothing is recorded, so `npm run dev` and
+forks stay silent instead of reporting into someone else's dashboard.
+
 ## Deploy on Vercel
 
 Import the repository, then set **Root Directory** to `web`. Vercel detects
