@@ -48,8 +48,13 @@ pub fn save(
     text: &str,
     name: &str,
     title: Option<&str>,
+    unwrap_fence: bool,
 ) -> Result<()> {
-    let body = ctx_app::docs::parse_spec_block(text)?;
+    let body = if unwrap_fence {
+        ctx_app::docs::parse_spec_block(text)?
+    } else {
+        text.to_owned()
+    };
     let saved = app.save_doc(branch, name, title, &body, "cli")?;
     if saved.duplicate {
         println!("`{}` on {branch} is unchanged", saved.doc.name);

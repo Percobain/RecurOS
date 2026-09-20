@@ -433,16 +433,24 @@ fn run(cli: Cli) -> Result<ExitCode> {
                     title,
                     to,
                 } => {
-                    let text = match (paste, file.as_deref()) {
-                        (true, _) => clipboard::paste()?,
-                        (false, Some(p)) if p == Path::new("-") => read_stdin()?,
-                        (false, Some(p)) => std::fs::read_to_string(p)
-                            .with_context(|| format!("reading {}", p.display()))?,
-                        (false, None) if !io::stdin().is_terminal() => read_stdin()?,
+                    // A file is the spec: take it literally. Pasted or piped
+                    // text comes from a chat, so a ````ctx-spec fence around it
+                    // is unwrapped. Unwrapping a file would be wrong for any
+                    // document that merely *contains* such a fence, like our own
+                    // docs/protocol.md.
+                    let (text, unwrap) = match (paste, file.as_deref()) {
+                        (true, _) => (clipboard::paste()?, true),
+                        (false, Some(p)) if p == Path::new("-") => (read_stdin()?, true),
+                        (false, Some(p)) => (
+                            std::fs::read_to_string(p)
+                                .with_context(|| format!("reading {}", p.display()))?,
+                            false,
+                        ),
+                        (false, None) if !io::stdin().is_terminal() => (read_stdin()?, true),
                         (false, None) => bail!("give a file, `-` for stdin, or --paste"),
                     };
                     let branch = app.resolve_branch(to.as_deref())?;
-                    flow::save(&mut app, &branch, &text, &name, title.as_deref())?;
+                    flow::save(&mut app, &branch, &text, &name, title.as_deref(), unwrap)?;
                 }
                 SpecCmd::Show { name, branch } => {
                     let b = app.resolve_branch(branch.as_deref())?;

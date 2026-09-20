@@ -155,3 +155,63 @@ fn init_wires_a_repo_and_packs_follow_the_binding() {
         String::from_utf8_lossy(&hook.stdout)
     );
 }
+
+#[test]
+fn spec_save_takes_a_file_literally_but_unwraps_a_pasted_fence() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("ctx");
+    let cwd = dir.path();
+
+    // A document that *describes* the ctx-spec protocol contains an example
+    // fence. Saving it as a file must store the whole document, not the
+    // example inside it (our own docs/protocol.md hit this).
+    let doc = "# Protocol\n\nModels answer like this:\n\n````ctx-spec\n# Example Spec\n\nnot the real spec\n````\n\nThe end.\n";
+    let path = cwd.join("protocol.md");
+    std::fs::write(&path, doc).unwrap();
+    let out = ok(&ctx(
+        &home,
+        cwd,
+        &[
+            "spec",
+            "save",
+            path.to_str().unwrap(),
+            "--name",
+            "protocol",
+            "--to",
+            "idea/research",
+        ],
+    ));
+    assert!(
+        out.starts_with("saved `protocol` on idea/research: \"Protocol\""),
+        "{out}"
+    );
+    let shown = ok(&ctx(
+        &home,
+        cwd,
+        &["spec", "show", "protocol", "--branch", "idea/research"],
+    ));
+    assert_eq!(shown, doc.trim_end().to_owned() + "\n");
+
+    // Piped text is a chat answer, so the fence around it is unwrapped.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_ctx"))
+        .args(["spec", "save", "-", "--to", "idea/research"])
+        .current_dir(cwd)
+        .env("CTX_HOME", &home)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(b"Sure:\n\n````ctx-spec\n# Real Spec\n\nbody\n````\n")
+        .unwrap();
+    assert!(child.wait_with_output().unwrap().status.success());
+    let shown = ok(&ctx(
+        &home,
+        cwd,
+        &["spec", "show", "--branch", "idea/research"],
+    ));
+    assert_eq!(shown, "# Real Spec\n\nbody\n");
+}
