@@ -40,7 +40,7 @@ export default function HowItWorks() {
       <p>
         This is the one place a subtle bug corrupts data instead of crashing, so the canonical
         form is frozen and its test vectors are asserted as literals produced by an independent
-        Python implementation — not by the Rust code under test.
+        Python implementation, not by the Rust code under test.
       </p>
 
       <h2>The log</h2>
@@ -67,7 +67,7 @@ export default function HowItWorks() {
         and the two rankings are fused by reciprocal rank. The strict pass alone returns nothing
         the moment a word is missing; the loose pass alone lets a claim sharing one common word
         outrank the claim that answers the question. Then it expands one hop out from the best
-        hits, following supersession and shared file references — a decision and the constraint
+        hits, following supersession and shared file references. A decision and the constraint
         it satisfies often share no vocabulary at all, only a path.
       </p>
 
@@ -91,7 +91,7 @@ export default function HowItWorks() {
       <p>
         <code>w(c)</code> multiplies kind, confidence, recency (constraints never decay),
         usefulness votes and status. Relevance halves every eight retrieval ranks, and coverage
-        is scaled by relevance too — otherwise a claim carrying five tags outscores anything the
+        is scaled by relevance too, because otherwise a claim carrying five tags outscores what the
         relevance term can award, and asking a question changes nothing about the answer.
       </p>
       <p>
@@ -103,7 +103,7 @@ export default function HowItWorks() {
 
       <h2>Branches</h2>
       <p>
-        Context is organised as <code>project/lane</code> — usually{" "}
+        Context is organised as <code>project/lane</code>, usually{" "}
         <code>project/research</code> and <code>project/code</code>. Research holds everything
         loose: ideas, open questions, beliefs. Code inherits only the decisions, constraints and
         rejected options, so the noise of exploring never reaches your coding agent.

@@ -24,8 +24,8 @@ const RELEASES: Release[] = [
         </p>
         <ul>
           <li>
-            <strong>Renamed to RecurOS.</strong> The CLI stays <code>ctx</code> — it is the
-            command, not the brand, and it was already in every config file.
+            <strong>Renamed to RecurOS.</strong> The CLI stays <code>ctx</code>, which is the
+            command and not the brand, and was already in every config file.
           </li>
           <li>
             <strong>Retrieval reads more than words.</strong> A claim&rsquo;s file references
@@ -42,15 +42,15 @@ const RELEASES: Release[] = [
             <strong>
               <code>ctx onboard</code>
             </strong>{" "}
-            — a prompt that fills an existing repository&rsquo;s context from its own code, run
-            by the agent already sitting in it.
+            writes a prompt that fills an existing repository&rsquo;s context from its own
+            code, run by the agent already sitting in it.
           </li>
           <li>
             <strong>
               <code>ctx rename</code> and <code>ctx list</code>
             </strong>{" "}
-            — carry a project&rsquo;s whole context to a new name; see every project and what it
-            costs.
+            carry a project&rsquo;s whole context to a new name, and show every project and
+            what it costs.
           </li>
           <li>
             <code>ctx spec save FILE</code> takes the file literally instead of unwrapping an

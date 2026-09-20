@@ -31,7 +31,7 @@ export default function Docs() {
 
       <h2>Wire a project</h2>
       <p>
-        From inside any project folder. This is idempotent — run it again whenever you add a new
+        From inside any project folder. This is idempotent: run it again whenever you add a new
         agent.
       </p>
       <pre>
@@ -43,14 +43,14 @@ export default function Docs() {
       <p>It writes four things, and only these:</p>
       <ul>
         <li>
-          <code>.ctx/config.yaml</code> — which context branch this repo uses. Commit it.
+          <code>.ctx/config.yaml</code>: which context branch this repo uses. Commit it.
         </li>
         <li>
-          <code>.ctx/commands.md</code> — the command list, so your agent can drive{" "}
+          <code>.ctx/commands.md</code>: the command list, so your agent can drive{" "}
           <code>ctx</code> without you learning it.
         </li>
         <li>
-          <code>AGENTS.md</code> — the compiled context, inside markers. Anything you wrote in
+          <code>AGENTS.md</code>: the compiled context, inside markers. Anything you wrote in
           that file yourself is kept.
         </li>
         <li>

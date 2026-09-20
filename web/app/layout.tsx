@@ -6,13 +6,13 @@ import { Mark } from "@/lib/mark";
 export const metadata: Metadata = {
   metadataBase: new URL("https://recuros.vercel.app"),
   title: {
-    default: "RecurOS — one memory for every AI tool you use",
-    template: "%s — RecurOS",
+    default: "RecurOS: one memory for every AI tool you use",
+    template: "%s | RecurOS",
   },
   description:
     "RecurOS records the decisions, constraints and rejected options behind a project, and compiles them into the small amount of context an AI agent actually needs. Local first, git synced, no account.",
   openGraph: {
-    title: "RecurOS — one memory for every AI tool you use",
+    title: "RecurOS: one memory for every AI tool you use",
     description:
       "Record a decision once. ChatGPT, claude.ai, Claude Code, Cursor and Codex all know it.",
     type: "website",

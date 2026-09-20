@@ -6,7 +6,7 @@ const STACK: Row[] = [
   {
     choice: "Rust, one binary",
     instead: "Node or Python",
-    why: "It has to start fast enough to run on every prompt, be installable without a runtime, and hold a file lock correctly. A daemon exists, but it is the same binary — ctx daemon, not a second thing to install.",
+    why: "It has to start fast enough to run on every prompt, be installable without a runtime, and hold a file lock correctly. A daemon exists, but it is the same binary: ctx daemon, not a second thing to install.",
   },
   {
     choice: "Git as the sync layer",
@@ -21,7 +21,7 @@ const STACK: Row[] = [
   {
     choice: "BLAKE3 over RFC 8785",
     instead: "UUIDs, or a hash of the raw JSON",
-    why: "Canonical JSON makes the id depend on the content and nothing else — not key order, not whitespace, not which language wrote it. The same claim saved from Rust, TypeScript and Python gets the same id.",
+    why: "Canonical JSON makes the id depend on the content and nothing else: not key order, not whitespace, not which language wrote it. The same claim saved from Rust, TypeScript and Python gets the same id.",
   },
   {
     choice: "SQLite + FTS5",
@@ -41,7 +41,7 @@ const STACK: Row[] = [
   {
     choice: "AGENTS.md on disk",
     instead: "Injecting context into every prompt",
-    why: "A plain file is the floor: it works for a teammate who does not have RecurOS, it survives every hook bug, and you can read it. Injection was tried and rejected — it makes the context invisible and unreviewable.",
+    why: "A plain file is the floor: it works for a teammate who does not have RecurOS, it survives every hook bug, and you can read it. Injection was tried and rejected, because it makes the context invisible and unreviewable.",
   },
 ];
 
@@ -78,7 +78,7 @@ export default function Decisions() {
     <>
       <h1>What we used, and why</h1>
       <p className="lede">
-        These are the actual entries in RecurOS&rsquo;s own store — it is built using itself, so
+        These are the actual entries in RecurOS&rsquo;s own store. It is built using itself, so
         the reasoning below is the same text its agents are given.
       </p>
 

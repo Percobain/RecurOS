@@ -70,7 +70,7 @@ export default function Chats() {
         </li>
         <li>
           <strong>ChatGPT</strong>: Settings &rarr; Apps &amp; Connectors (developer mode) &rarr;
-          Create. Same URL, authentication <em>None</em> — the secret is already in the path.
+          Create. Same URL, authentication <em>None</em>, since the secret is already in the path.
         </li>
       </ul>
 
@@ -104,7 +104,7 @@ export default function Chats() {
             </tr>
             <tr>
               <td className="num">ctx_append</td>
-              <td className="wrap-cell">Record a claim — only when you ask for it.</td>
+              <td className="wrap-cell">Record a claim. Only when you ask for it.</td>
             </tr>
             <tr>
               <td className="num">ctx_propose</td>

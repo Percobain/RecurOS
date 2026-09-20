@@ -73,7 +73,7 @@ export default function Numbers() {
       </div>
       <p className="note">
         <strong>What this does and does not say.</strong> It is not a claim that an agent reads
-        all {fmt(bench.prose_tokens)} tokens on every turn — a good agent greps first. It is the
+        all {fmt(bench.prose_tokens)} tokens on every turn, because a good agent greps first. It is the
         size of the haystack it is grepping, versus the size of the answer when the answer was
         written down on purpose. The compiled context is also{" "}
         <em>all</em> of it: there is nothing else to go and find.
@@ -81,8 +81,8 @@ export default function Numbers() {
 
       <h2>One real question</h2>
       <p>
-        &ldquo;{bench.question}?&rdquo; — a question with a genuine answer in this codebase,
-        asked both ways.
+        &ldquo;{bench.question}?&rdquo; is a question with a genuine answer in this
+        codebase. Asked both ways:
       </p>
       <div className="table-wrap">
         <table>
@@ -106,7 +106,7 @@ export default function Numbers() {
                 Read <code>{bench.answer_source}</code>
               </td>
               <td className="num">{fmt(bench.answer_source_tokens)}</td>
-              <td style={{ color: "var(--warn)" }}>no — the code shows what, not why</td>
+              <td style={{ color: "var(--warn)" }}>no: the code shows what, not why</td>
             </tr>
           </tbody>
         </table>
@@ -172,8 +172,9 @@ export default function Numbers() {
 
       <h2>Size on disk</h2>
       <p>
-        The entire store — every claim, every status change, every document version ever written
-        — is {kb(bench.log_bytes)} of JSONL across {bench.claims_indexed} records. The SQLite
+        The entire store, meaning every claim, every status change and every document version
+        ever written, is {kb(bench.log_bytes)} of JSONL across {bench.claims_indexed} records. The
+        SQLite
         index beside it is disposable and rebuilt in {bench.ms_reindex} ms, so it is not really
         storage at all.
       </p>
@@ -188,7 +189,7 @@ export default function Numbers() {
         </code>
       </pre>
       <p>
-        Against your own store the absolute numbers will differ — that is the point of
+        Against your own store the absolute numbers will differ, which is the point of
         publishing the script rather than a screenshot.
       </p>
     </>

@@ -14,7 +14,7 @@ export default function Home() {
           <p className="lede">
             You decide something in ChatGPT. You refine it in claude.ai. Then you open Claude
             Code and it knows none of it. RecurOS records the decision once and{" "}
-            <strong>compiles it into the context every one of them reads</strong> — the
+            <strong>compiles it into the context every one of them reads</strong>: the
             constraints, the rejected options, and the reason each was chosen.
           </p>
           <div className="cta">
@@ -87,7 +87,7 @@ export default function Home() {
               <p>
                 &ldquo;{bench.question}?&rdquo; is {bench.answer_tokens} tokens as a recorded
                 decision, or {fmt(bench.answer_source_tokens)} tokens of{" "}
-                <code>{bench.answer_source}</code> to read and infer from — and the file never
+                <code>{bench.answer_source}</code> to read and infer from, and the file never
                 says <em>why</em>.
               </p>
             </div>
@@ -106,7 +106,7 @@ export default function Home() {
               <h3>You say &ldquo;save that&rdquo;</h3>
               <p>
                 In any chat or coding agent. One sentence becomes a <em>claim</em>: a decision,
-                a constraint, a rejected option, a fact, an open question — with the reason it
+                a constraint, a rejected option, a fact, an open question, with the reason it
                 holds and the files it is about.
               </p>
             </li>
@@ -135,7 +135,7 @@ export default function Home() {
           <h2>Already have a project?</h2>
           <p className="section-lede">
             An existing codebase already holds most of its own context; it is just spread across
-            the README, the docs, and people&rsquo;s heads. RecurOS does not read repositories —
+            the README, the docs, and people&rsquo;s heads. RecurOS does not read repositories;
             the agent already sitting in yours does, and it is the one that knows which of what
             it read is worth keeping.
           </p>

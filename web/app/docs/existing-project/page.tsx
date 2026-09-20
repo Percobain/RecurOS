@@ -8,7 +8,7 @@ export default function ExistingProject() {
       <h1>Filling a project that already exists</h1>
       <p className="lede">
         A new project starts empty and fills as you work. A project with two years of history
-        does not — and re-typing two years of decisions is not something anybody will do.
+        does not, and re-typing two years of decisions is not something anybody will do.
       </p>
 
       <h2>The one command</h2>
@@ -44,8 +44,8 @@ export default function ExistingProject() {
 
       <h2>What the prompt asks for</h2>
       <p>
-        It names the entry points that actually exist in your repo — the README, the build
-        manifests, <code>docs/</code> — and then it is specific about what to keep:
+        It names the entry points that actually exist in your repo (the README, the build
+        manifests, <code>docs/</code>), and then it is specific about what to keep:
       </p>
       <div className="note">
         Record the things the code cannot say for itself: why this database and not another,
@@ -57,7 +57,7 @@ export default function ExistingProject() {
         <li>One claim per fact, phrased so it is still true next month.</li>
         <li>No progress notes, task lists, or summaries of what the agent did.</li>
         <li>
-          No guessing. Ten claims you are sure of beat thirty you inferred — a store you do not
+          No guessing. Ten claims you are sure of beat thirty you inferred. A store you do not
           trust is worse than no store, because you have to check it anyway.
         </li>
       </ul>
@@ -83,7 +83,7 @@ export default function ExistingProject() {
       <h2>Bringing in a project already under another name</h2>
       <p>
         If you already have context under a different project name, <code>ctx rename</code>{" "}
-        carries all of it over — every claim with its reason, references, tags, confidence,
+        carries all of it over: every claim with its reason, references, tags, confidence,
         original date and its place in the supersession chain, plus the current version of every
         document.
       </p>
