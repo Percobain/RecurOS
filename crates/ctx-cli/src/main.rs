@@ -15,6 +15,8 @@ use anyhow::{Context, Result, bail};
 use chrono::{DateTime, NaiveDate, Utc};
 use clap::{Parser, Subcommand, ValueEnum};
 use ctx_app::{App, PackOpts, SaveOutcome, VerifyResult, first_line};
+use std::collections::{BTreeMap, BTreeSet};
+
 use ctx_branch::Binding;
 use ctx_core::{BranchRef, Claim, ClaimDraft, Confidence, Filter, Kind, Status, Store};
 use ctx_git::CtxHome;
@@ -169,6 +171,23 @@ enum Command {
     },
     /// Show one claim in full, with its history.
     Show { id: String },
+    /// Every idea you have context for, with its branches and sizes.
+    #[command(visible_alias = "ls")]
+    List {
+        /// Include ideas you have deleted.
+        #[arg(long)]
+        all: bool,
+    },
+    /// Rename an idea, carrying its claims and documents over.
+    Rename {
+        /// The idea to rename.
+        from: String,
+        /// Its new name.
+        to: String,
+        /// Don't ask for confirmation.
+        #[arg(short, long)]
+        yes: bool,
+    },
     /// Delete a claim (c:xxxx), a branch (idea/branch) or a whole idea.
     /// It disappears everywhere but stays in the history.
     #[command(visible_alias = "delete")]
@@ -663,6 +682,8 @@ fn run(cli: Cli) -> Result<ExitCode> {
                 );
             }
         }
+        Command::List { all } => list(&home, all)?,
+        Command::Rename { from, to, yes } => rename(&home, &from, &to, yes)?,
         Command::Remove { target, yes, cloud } => remove(&home, &target, yes, cloud)?,
         Command::Archive { id, reason } => {
             let mut app = open(&home)?;
@@ -866,6 +887,113 @@ pub(crate) fn sync_now(app: &mut App, strict: bool) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// `ctx list`: every idea, so you can see what to keep and what to delete.
+fn list(home: &CtxHome, all: bool) -> Result<()> {
+    let app = open(home)?;
+    let active = app.active_ref();
+    let bound = app.binding.as_ref().map(|b| b.project.clone());
+    let mut names: BTreeSet<String> = app.branches.all().into_iter().map(String::from).collect();
+    for c in app.store.branches()? {
+        names.insert(c.branch);
+    }
+    let mut projects: BTreeMap<String, Vec<(BranchRef, usize, usize, bool)>> = BTreeMap::new();
+    for b in names
+        .iter()
+        .map(|n| BranchRef::new(n))
+        .collect::<Result<Vec<_>, _>>()?
+    {
+        let Some((project, _)) = b.as_str().split_once('/') else {
+            continue;
+        };
+        let (claims, docs) = app.removal_counts(&b)?;
+        let archived = app.branches.get(&b).is_some_and(|d| d.archived);
+        if archived && claims + docs == 0 && !all {
+            continue;
+        }
+        projects
+            .entry(project.to_owned())
+            .or_default()
+            .push((b, claims, docs, archived));
+    }
+    if projects.is_empty() {
+        println!("no ideas yet. Start one with: ctx new \"<your idea>\"");
+        return Ok(());
+    }
+    for (project, branches) in &projects {
+        let here = (bound.as_deref() == Some(project.as_str())).then_some(" (this repo)");
+        println!("{project}{}", here.unwrap_or(""));
+        for (b, claims, docs, archived) in branches {
+            let mark = if active.as_ref() == Some(b) { "*" } else { " " };
+            let mut note = String::new();
+            if *docs > 0 {
+                note.push_str(&format!(", {}", plural(*docs, "document", "documents")));
+            }
+            if *archived {
+                note.push_str("  [deleted]");
+            }
+            println!(
+                "  {mark} {:<28} {}{note}",
+                b.as_str(),
+                plural(*claims, "claim", "claims")
+            );
+        }
+    }
+    println!("\nDelete one everywhere (here, GitHub, ChatGPT, claude.ai):");
+    println!("  ctx delete <idea> --cloud");
+    Ok(())
+}
+
+/// `ctx rename`: the same context under a new name.
+fn rename(home: &CtxHome, from: &str, to: &str, yes: bool) -> Result<()> {
+    let mut app = open(home)?;
+    let (from, to) = (slug(from), slug(to));
+    let branches = app.project_branches(&from)?;
+    if branches.is_empty() {
+        bail!("no idea named `{from}`");
+    }
+    let (mut claims, mut docs) = (0, 0);
+    for b in &branches {
+        let (c, d) = app.removal_counts(b)?;
+        claims += c;
+        docs += d;
+    }
+    let question = format!(
+        "Rename {from} to {to} ({}, {})? Nothing is lost; the old name is kept as history.",
+        plural(claims, "claim", "claims"),
+        plural(docs, "document version", "document versions")
+    );
+    if !confirm(&question, yes)? {
+        println!("nothing renamed");
+        return Ok(());
+    }
+    let moved = app.rename_project(&from, &to)?;
+    println!(
+        "renamed {from} to {to}: {}, {} across {}",
+        plural(moved.claims, "claim", "claims"),
+        plural(moved.docs, "document", "documents"),
+        plural(moved.branches, "branch", "branches")
+    );
+    // Any repo bound to the old name should follow it.
+    if let Some(binding) = app.binding.clone()
+        && binding.project == from
+    {
+        let moved = Binding {
+            project: to.clone(),
+            ..binding
+        };
+        moved.write(&moved.root)?;
+        app.binding = Some(moved.clone());
+        println!("  this repo now uses {to}/{}", moved.branch);
+    }
+    if let Some(block) = app.refresh_agents_md()? {
+        let _ = block;
+        println!("  AGENTS.md updated");
+    }
+    sync_now(&mut app, false)?;
+    println!("  synced: ChatGPT and claude.ai see the new name");
+    Ok(())
 }
 
 fn remove(home: &CtxHome, target: &str, yes: bool, cloud: bool) -> Result<()> {

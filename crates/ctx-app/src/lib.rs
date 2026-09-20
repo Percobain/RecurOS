@@ -71,6 +71,19 @@ pub struct App {
     machine: String,
 }
 
+/// What [`App::rename_project`] carried over.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Renamed {
+    pub branches: usize,
+    pub claims: usize,
+    pub docs: usize,
+}
+
+/// The lane half of `project/lane`.
+fn lane_of(b: &BranchRef) -> &str {
+    b.as_str().split_once('/').map_or("code", |(_, lane)| lane)
+}
+
 #[derive(Debug)]
 pub enum SaveOutcome {
     Saved(Claim),
@@ -611,6 +624,111 @@ impl App {
             self.set_active(&BranchRef::default_branch())?;
         }
         Ok((claims, docs.len()))
+    }
+
+    /// `ctx rename <old> <new>`: carry a project's context over to a new
+    /// name, then retire the old one.
+    ///
+    /// A claim's branch is part of what it hashes, so a claim cannot change
+    /// branch: renaming means re-recording every claim under the new name.
+    /// The copies get new ids (and so new `c:` tags), keep their original
+    /// `t_valid` so recency is unchanged, and keep their supersession chain,
+    /// remapped to the new ids. The originals are archived, not erased: the
+    /// old name stays readable in `ctx log --all`.
+    pub fn rename_project(&mut self, old: &str, new: &str) -> Result<Renamed> {
+        let old = old.trim();
+        let new = new.trim();
+        if old == new {
+            bail!("`{old}` is already its name");
+        }
+        // Validate the new name the same way any branch name is validated.
+        BranchRef::new(&format!("{new}/code"))?;
+        if !self.project_branches(new)?.is_empty() {
+            bail!("`{new}` already exists; remove it first or pick another name");
+        }
+        let branches = self.project_branches(old)?;
+        if branches.is_empty() {
+            bail!("no idea named `{old}`");
+        }
+
+        // The branch graph first, so `save` below can check what each lane
+        // holds. The old definitions stay, and `remove_project` marks them
+        // archived at the end.
+        // Parents before children: each insert is validated on its own, and
+        // a lane whose parent is not there yet is not a valid branch.
+        let mut defs: Vec<(BranchRef, BranchDef)> = branches
+            .iter()
+            .filter_map(|b| {
+                let def = self.branches.get(b).cloned()?;
+                let target = BranchRef::new(&format!("{new}/{}", lane_of(b))).ok()?;
+                Some((target, def))
+            })
+            .collect();
+        defs.sort_by_key(|(_, def)| def.parent.is_some());
+        for (target, def) in defs {
+            self.branches.insert(&target, def)?;
+        }
+        self.save_branches()?;
+
+        let mut moved: HashMap<Ulid, Ulid> = HashMap::new();
+        let mut claims = 0usize;
+        let mut docs = 0usize;
+        for b in &branches {
+            let target = BranchRef::new(&format!("{new}/{}", lane_of(b)))?;
+            let mut pool = self.store.scan(&Filter {
+                branch: Some(b.clone()),
+                ..Default::default()
+            })?;
+            // Oldest first, so a claim's `supersedes` always points at one
+            // that has already been re-recorded.
+            pool.sort_by_key(|c| c.id);
+            for c in pool {
+                if c.status == Status::Archived {
+                    continue; // already deleted; no reason to carry it over
+                }
+                let mut d = ClaimDraft::new(c.kind, c.text.clone());
+                d.branch = target.clone();
+                d.why = c.why.clone();
+                d.refs = c.refs.clone();
+                d.entities = c.entities.clone();
+                d.confidence = c.confidence;
+                d.src = c.src.clone();
+                d.t_valid = Some(c.t_valid);
+                d.supersedes = c.supersedes.and_then(|o| moved.get(&o).copied());
+                let outcome = if c.status == Status::Proposed {
+                    self.propose(d)?
+                } else {
+                    self.save(d)?
+                };
+                let fresh = outcome.claim().clone();
+                moved.insert(c.id, fresh.id);
+                // Superseded follows from the remapped chain; the rest is
+                // carried over explicitly.
+                if !matches!(
+                    c.status,
+                    Status::Active | Status::Proposed | Status::Superseded
+                ) {
+                    self.transition(&fresh, c.status, Some(format!("renamed from {b}")), "cli")?;
+                }
+                claims += 1;
+            }
+            // Only what this branch owns: `visible_docs` also shows the
+            // documents it inherits, and copying those would give the new
+            // project two of each.
+            for doc in self.visible_docs(b)?.into_iter().filter(|d| d.branch == *b) {
+                self.save_doc(&target, &doc.name, Some(&doc.title), &doc.body, &doc.src)?;
+                docs += 1;
+            }
+        }
+
+        self.remove_project(old)?;
+        let active = BranchRef::new(&format!("{new}/{}", lane_of(&branches[0])))?;
+        self.set_active(&active)?;
+        Ok(Renamed {
+            branches: branches.len(),
+            claims,
+            docs,
+        })
     }
 
     /// `ctx remove <idea>`: remove every branch of a project.

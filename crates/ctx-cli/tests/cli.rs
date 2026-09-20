@@ -215,3 +215,87 @@ fn spec_save_takes_a_file_literally_but_unwraps_a_pasted_fence() {
     ));
     assert_eq!(shown, "# Real Spec\n\nbody\n");
 }
+
+#[test]
+fn rename_carries_an_idea_over_and_retires_the_old_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = dir.path().join("ctx");
+    let cwd = dir.path();
+
+    ok(&ctx(&home, cwd, &["new", "demo idea"]));
+    ok(&ctx(
+        &home,
+        cwd,
+        &[
+            "save",
+            "Use postgres",
+            "-k",
+            "decision",
+            "-w",
+            "transactions",
+            "-r",
+            "src/db.rs",
+            "--to",
+            "demo-idea/research",
+        ],
+    ));
+    ok(&ctx(
+        &home,
+        cwd,
+        &[
+            "save",
+            "Latency stays under 100ms",
+            "-k",
+            "constraint",
+            "--to",
+            "demo-idea/research",
+        ],
+    ));
+
+    let out = ok(&ctx(
+        &home,
+        cwd,
+        &["rename", "demo idea", "Better Idea", "--yes"],
+    ));
+    assert!(
+        out.contains("renamed demo-idea to better-idea: 2 claims"),
+        "{out}"
+    );
+
+    // The context is on the new name, whys and refs intact.
+    let listed = ok(&ctx(
+        &home,
+        cwd,
+        &["log", "--branch", "better-idea/research"],
+    ));
+    assert!(
+        listed.contains("Use postgres") && listed.contains("Latency"),
+        "{listed}"
+    );
+    let packed = ok(&ctx(&home, cwd, &["pack", "better-idea/research"]));
+    assert!(packed.contains("src/db.rs"), "{packed}");
+
+    // The old name is retired, not erased: nothing visible, still in history.
+    let old = ok(&ctx(&home, cwd, &["log", "--branch", "demo-idea/research"]));
+    assert!(!old.contains("Use postgres"), "{old}");
+    let history = ok(&ctx(
+        &home,
+        cwd,
+        &["log", "--branch", "demo-idea/research", "--all"],
+    ));
+    assert!(history.contains("Use postgres"), "{history}");
+
+    // `ctx list` shows the new idea and not the retired one.
+    let list = ok(&ctx(&home, cwd, &["list"]));
+    assert!(list.contains("better-idea/research"), "{list}");
+    assert!(!list.contains("demo-idea"), "{list}");
+    assert!(ok(&ctx(&home, cwd, &["list", "--all"])).contains("demo-idea"));
+
+    // Renaming onto a name that already holds context is refused.
+    let clash = ctx(
+        &home,
+        cwd,
+        &["rename", "better-idea", "better-idea", "--yes"],
+    );
+    assert!(!clash.status.success());
+}
