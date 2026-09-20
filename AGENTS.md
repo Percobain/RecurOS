@@ -40,5 +40,5 @@ Save only when I explicitly say so, plus one batched call at session end.
 Use ctx_append(kind, text, why, refs). Don't log progress or summaries.
 Cross-branch material: ctx_propose(target_branch, ...).
 For anything else RecurOS does (new idea, spec, build, delete, sync, map, handoff), run the `ctx` CLI yourself; commands are in `.ctx/commands.md` (or `ctx commands`). Ask before deleting.
-<!-- ctx/1 b=recuros/code n=18 t=604/700 root=b3:aa57131f gen=01M2YW8F v=0.1.0 -->
+<!-- ctx/1 b=recuros/code n=18 t=604/700 root=b3:aa57131f gen=01M2YWWY v=0.1.0 -->
 <!-- ctx:end -->

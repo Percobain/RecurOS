@@ -939,6 +939,12 @@ fn list(home: &CtxHome, all: bool) -> Result<()> {
     for c in app.store.branches()? {
         names.insert(c.branch);
     }
+    // Branch summaries come from claims, so a branch holding only documents
+    // is invisible without this: exactly how a mis-saved spec sat in the
+    // store where nobody could see it to delete it.
+    for d in app.store.docs(None)? {
+        names.insert(d.branch.to_string());
+    }
     let mut projects: BTreeMap<String, Vec<(BranchRef, usize, usize, bool)>> = BTreeMap::new();
     for b in names
         .iter()

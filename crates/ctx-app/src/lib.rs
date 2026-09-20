@@ -564,8 +564,22 @@ impl App {
         }
         if let Some(def) = self.branches.get_mut(branch) {
             def.archived = true;
-            self.save_branches()?;
+        } else {
+            // A branch can exist without ever being defined: saving from a
+            // chat creates claims on a name nobody declared. With no
+            // definition there was nowhere to record that it had been
+            // deleted, so an emptied branch came back in every listing
+            // forever. Declare it, archived, so the deletion sticks.
+            self.branches.insert(
+                branch,
+                BranchDef {
+                    holds: Kind::ALL.to_vec(),
+                    archived: true,
+                    ..BranchDef::default()
+                },
+            )?;
         }
+        self.save_branches()?;
         Ok(n)
     }
 
