@@ -135,7 +135,7 @@ enum Command {
         #[arg(short, long)]
         verbose: bool,
         /// Include claims you have deleted.
-        #[arg(long)]
+        #[arg(short, long)]
         all: bool,
     },
     /// Compile a branch's context into markdown.
@@ -185,7 +185,7 @@ enum Command {
     #[command(visible_alias = "ls")]
     List {
         /// Include ideas you have deleted.
-        #[arg(long)]
+        #[arg(short, long)]
         all: bool,
     },
     /// Rename an idea, carrying its claims and documents over.
@@ -254,7 +254,7 @@ enum Command {
         #[arg(short, long)]
         verbose: bool,
         /// Include deleted (archived) claims.
-        #[arg(long)]
+        #[arg(short, long)]
         all: bool,
     },
     /// Score packs against questions with known answers, to tune weights.
@@ -962,8 +962,18 @@ fn list(home: &CtxHome, all: bool) -> Result<()> {
         println!("no ideas yet. Start one with: ctx new \"<your idea>\"");
         return Ok(());
     }
+    let width = projects
+        .values()
+        .flatten()
+        .map(|(b, ..)| b.as_str().len())
+        .max()
+        .unwrap_or(24)
+        .clamp(24, 44);
     for (project, branches) in &projects {
-        let here = (bound.as_deref() == Some(project.as_str())).then_some(" (this repo)");
+        let here = (bound.as_deref() == Some(project.as_str())).then_some("  (this repo)");
+        let (claims, docs): (usize, usize) = branches
+            .iter()
+            .fold((0, 0), |(c, d), (_, bc, bd, _)| (c + bc, d + bd));
         println!("{project}{}", here.unwrap_or(""));
         for (b, claims, docs, archived) in branches {
             let mark = if active.as_ref() == Some(b) { "*" } else { " " };
@@ -975,14 +985,32 @@ fn list(home: &CtxHome, all: bool) -> Result<()> {
                 note.push_str("  [deleted]");
             }
             println!(
-                "  {mark} {:<28} {}{note}",
+                "  {mark} {:<width$} {}{note}",
                 b.as_str(),
                 plural(*claims, "claim", "claims")
             );
         }
+        // The whole-idea command, spelled out per idea, because the thing
+        // people want to delete is usually the idea and not one branch of it.
+        if claims + docs > 0 {
+            println!(
+                "    delete the whole idea:  ctx delete {project} --cloud   \
+({}, {})",
+                plural(claims, "claim", "claims"),
+                plural(docs, "document version", "document versions")
+            );
+        } else if branches.iter().all(|(_, _, _, archived)| *archived) {
+            println!("    already deleted");
+        } else {
+            println!("    empty:  ctx delete {project} --cloud");
+        }
+        println!();
     }
-    println!("\nDelete one everywhere (here, GitHub, ChatGPT, claude.ai):");
-    println!("  ctx delete <idea> --cloud");
+    println!("Deleting hides it here, on GitHub, and in ChatGPT and claude.ai.");
+    println!("Nothing leaves the log: `ctx log --all` still shows it.");
+    if !all {
+        println!("Already-deleted ideas are hidden; `ctx list -a` shows them too.");
+    }
     Ok(())
 }
 
