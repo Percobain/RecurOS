@@ -38,6 +38,15 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// Retrieval depth for task-focused packs (spec §8.3).
 const RETRIEVE_TOP: usize = 200;
 
+/// What an unretrieved claim is worth relative to the weakest retrieved one.
+/// Low enough that anything the search found wins, high enough that weight
+/// (a constraint, a pin, a recent decision) can still buy a place.
+const RELEVANCE_FLOOR: f64 = 0.2;
+
+/// How many of the best hits to expand from. Expanding the whole result would
+/// pull in the graph around claims that only matched a common word.
+const EXPAND_SEEDS: usize = 12;
+
 pub struct App {
     pub home: CtxHome,
     pub store: SqliteStore,
@@ -643,21 +652,47 @@ impl App {
         let relevance: Option<HashMap<Ulid, f64>> = match opts.task.as_deref().map(str::trim) {
             Some(task) if !task.is_empty() => {
                 let in_pool: BTreeSet<Ulid> = pool.iter().map(|c| c.id).collect();
-                let ranked: Vec<Ulid> = self
+                let filter = Filter {
+                    limit: Some(RETRIEVE_TOP * 4),
+                    ..Default::default()
+                };
+                let mut ranked: Vec<Ulid> = self
                     .store
-                    .search(
-                        task,
-                        &Filter {
-                            limit: Some(RETRIEVE_TOP * 4),
-                            ..Default::default()
-                        },
-                    )?
+                    .search(task, &filter)?
                     .into_iter()
                     .map(|c| c.id)
                     .filter(|id| in_pool.contains(id))
                     .take(RETRIEVE_TOP)
                     .collect();
-                Some(rrf(&[ranked]))
+                // Then one hop out from the best hits. Appending rather than
+                // fusing a second list is deliberate: a neighbour should sit
+                // below every direct hit, not compete with the top of it.
+                let seeds: Vec<Ulid> = ranked.iter().copied().take(EXPAND_SEEDS).collect();
+                let known: BTreeSet<Ulid> = ranked.iter().copied().collect();
+                ranked.extend(
+                    self.store
+                        .neighbors(&seeds, &filter, RETRIEVE_TOP)?
+                        .into_iter()
+                        .filter(|id| in_pool.contains(id) && !known.contains(id)),
+                );
+                let mut scores = rrf(&[ranked]);
+                // A task narrows the pack; it must not empty it. Claims the
+                // search did not rank keep a floor well below the weakest
+                // match, so a constraint nobody happens to phrase the way
+                // this task phrases it can still be packed when there is
+                // budget left for it. With no match at all there is nothing
+                // to narrow by, so the task is ignored rather than obeyed
+                // into an almost empty pack.
+                if scores.is_empty() {
+                    None
+                } else {
+                    let floor =
+                        scores.values().copied().fold(f64::INFINITY, f64::min) * RELEVANCE_FLOOR;
+                    for c in &pool {
+                        scores.entry(c.id).or_insert(floor);
+                    }
+                    Some(scores)
+                }
             }
             _ => None,
         };

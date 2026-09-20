@@ -178,12 +178,7 @@ fn identity_args(dir: &Path) -> Vec<&'static str> {
     if has_identity {
         Vec::new()
     } else {
-        vec![
-            "-c",
-            "user.name=RecurOS",
-            "-c",
-            "user.email=ctx@localhost",
-        ]
+        vec!["-c", "user.name=RecurOS", "-c", "user.email=ctx@localhost"]
     }
 }
 

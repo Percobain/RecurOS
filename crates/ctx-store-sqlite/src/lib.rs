@@ -11,6 +11,7 @@
 //! arrive in any order — a transition read before its claim is simply applied
 //! when the claim shows up.
 
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::Path;
 
@@ -25,7 +26,7 @@ use thiserror::Error;
 use ulid::Ulid;
 
 /// Bump whenever the schema changes; a mismatch triggers a full rebuild.
-const SCHEMA_VERSION: i64 = 3;
+const SCHEMA_VERSION: i64 = 4;
 
 const SCHEMA: &str = "
 CREATE TABLE claims (
@@ -34,7 +35,7 @@ CREATE TABLE claims (
   tokens INTEGER NOT NULL, confidence TEXT NOT NULL, src TEXT NOT NULL,
   t_valid TEXT NOT NULL, t_tx TEXT NOT NULL, last_used TEXT,
   helpful INTEGER NOT NULL DEFAULT 0, harmful INTEGER NOT NULL DEFAULT 0,
-  text TEXT NOT NULL, why TEXT, entities TEXT NOT NULL,
+  text TEXT NOT NULL, why TEXT, entities TEXT NOT NULL, refs TEXT NOT NULL DEFAULT '',
   body TEXT NOT NULL
 );
 CREATE INDEX idx_branch_status ON claims(branch, status);
@@ -42,7 +43,7 @@ CREATE INDEX idx_kind ON claims(kind);
 CREATE INDEX idx_cid_branch ON claims(cid, branch);
 
 CREATE VIRTUAL TABLE claims_fts USING fts5(
-  text, why, entities,
+  text, why, entities, refs,
   content='claims', content_rowid='rowid',
   tokenize='porter unicode61 remove_diacritics 2'
 );
@@ -136,6 +137,33 @@ impl SqliteStore {
 
     /// Run a query selecting `(body, status)` rows and rehydrate claims with
     /// their effective status and counters.
+    /// One FTS5 pass, returning claim ids best-first.
+    fn fts_ids(
+        &self,
+        query: &str,
+        filter: &Filter,
+        limit: usize,
+    ) -> Result<Vec<String>, SqliteError> {
+        let mut params = vec![Value::Text(query.to_owned())];
+        let where_ = filter_sql(filter, &mut params);
+        // bm25 column weights: `entities` are curated tags and `refs` are the
+        // files a claim is about, so a hit there is a deliberate pointer and
+        // counts most; `why` is supporting prose and counts least. Ties break
+        // towards the newer claim.
+        let sql = format!(
+            "SELECT c.id FROM claims_fts f JOIN claims c ON c.rowid = f.rowid
+             WHERE claims_fts MATCH ?{where_}
+             ORDER BY bm25(claims_fts, 1.0, 0.5, 2.0, 1.5), c.id DESC LIMIT {limit}"
+        );
+        let mut stmt = self.conn.prepare_cached(&sql)?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(params.iter()), |r| {
+                r.get::<_, String>(0)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    }
+
     fn query_claims(&self, sql: &str, params: &[Value]) -> Result<Vec<Claim>, SqliteError> {
         let mut stmt = self.conn.prepare_cached(sql)?;
         let rows = stmt
@@ -198,12 +226,17 @@ fn ts(t: DateTime<Utc>) -> String {
 /// reconciled once per batch by `reconcile_late_records`.
 fn insert_claim(tx: &Transaction, c: &Claim) -> Result<bool, SqliteError> {
     let entities = c.entities.join(" ");
+    // Refs are file paths and symbols: the most specific handle a claim has.
+    // The unicode61 tokeniser splits `crates/ctx-pack/src/lib.rs` on its
+    // punctuation, so indexing the joined list is enough for "pack" or
+    // "lib.rs" to find the claims attached to that file.
+    let refs = c.refs.join(" ");
     let inserted = tx
         .prepare_cached(
             "INSERT OR IGNORE INTO claims
          (id, cid, kind, branch, status, base_status, tokens, confidence, src, t_valid, t_tx,
-          last_used, text, why, entities, body)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          last_used, text, why, entities, refs, body)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         )?
         .execute(params![
             c.id.to_string(),
@@ -221,13 +254,22 @@ fn insert_claim(tx: &Transaction, c: &Claim) -> Result<bool, SqliteError> {
             c.text,
             c.why,
             entities,
+            refs,
             serde_json::to_string(c)?,
         ])?;
     if inserted == 0 {
         return Ok(false); // already indexed (duplicate line)
     }
-    tx.prepare_cached("INSERT INTO claims_fts(rowid, text, why, entities) VALUES (?,?,?,?)")?
-        .execute(params![tx.last_insert_rowid(), c.text, c.why, entities])?;
+    tx.prepare_cached(
+        "INSERT INTO claims_fts(rowid, text, why, entities, refs) VALUES (?,?,?,?,?)",
+    )?
+    .execute(params![
+        tx.last_insert_rowid(),
+        c.text,
+        c.why,
+        entities,
+        refs
+    ])?;
     if let Some(old) = c.supersedes {
         tx.prepare_cached("INSERT INTO edges(src, dst, kind) VALUES (?,?,'supersedes')")?
             .execute(params![c.id.to_string(), old.to_string()])?;
@@ -450,16 +492,121 @@ fn filter_sql(filter: &Filter, params: &mut Vec<Value>) -> String {
     sql
 }
 
-/// Turn free text into a safe FTS5 query: each word becomes a quoted prefix
-/// term, OR-ed together so bm25 ranks claims matching more words higher.
-/// Quoting means user input can never be parsed as FTS5 syntax.
-fn fts_query(query: &str) -> Option<String> {
-    let terms: Vec<String> = query
+/// Function words. They appear in nearly every claim and nearly every task
+/// description, so OR-ing them in makes bm25 rank on noise, and AND-ing them
+/// in throws away good matches over a word that carries no meaning.
+const QUERY_STOPWORDS: &[&str] = &[
+    "a", "an", "the", "and", "or", "but", "for", "with", "that", "this", "these", "those", "from",
+    "into", "is", "are", "was", "were", "be", "been", "being", "it", "its", "of", "on", "in", "at",
+    "to", "we", "us", "our", "you", "your", "i", "my", "me", "they", "their", "do", "does", "did",
+    "how", "what", "why", "when", "where", "which", "who", "can", "could", "should", "would",
+    "will", "shall", "may", "might", "must", "not", "no", "have", "has", "had", "use", "using",
+    "used", "about", "than", "then", "there", "here", "if", "so", "as", "by", "just", "please",
+];
+
+/// A long task description is mostly scene-setting; past a couple of dozen
+/// words the extra terms only broaden the OR pass.
+const MAX_TERMS: usize = 24;
+
+/// The two lexical passes over one piece of free text.
+struct FtsQuery {
+    /// Every meaningful word, OR-ed: broad, ranked by bm25.
+    any: String,
+    /// The same words AND-ed: only claims containing all of them. `None` for
+    /// a single word, where it would be the same query as `any`.
+    all: Option<String>,
+}
+
+/// Split a camelCase or PascalCase word into its parts, lowercased.
+/// `syncNow` gives `["sync", "now"]`; a word with no internal capital gives
+/// nothing. FTS5's unicode61 tokeniser keeps `syncNow` as a single token, so
+/// without this a claim that says "sync" is invisible to that query.
+fn camel_parts(word: &str) -> Vec<String> {
+    let mut parts: Vec<String> = Vec::new();
+    let mut cur = String::new();
+    for ch in word.chars() {
+        if ch.is_uppercase() && !cur.is_empty() {
+            parts.push(std::mem::take(&mut cur));
+        }
+        cur.extend(ch.to_lowercase());
+    }
+    parts.push(cur);
+    if parts.len() < 2 {
+        return Vec::new();
+    }
+    parts.retain(|p| p.chars().count() > 1);
+    parts
+}
+
+/// Turn free text into the two safe FTS5 queries. Every word becomes a quoted
+/// prefix term, so user input can never be parsed as FTS5 syntax, and so
+/// "sync" still matches "syncing".
+fn fts_query(query: &str) -> Option<FtsQuery> {
+    let mut words: Vec<String> = Vec::new();
+    let push = |w: String, words: &mut Vec<String>| {
+        if !words.contains(&w) {
+            words.push(w);
+        }
+    };
+    for raw in query
         .split(|c: char| !c.is_alphanumeric())
         .filter(|t| !t.is_empty())
+    {
+        for part in camel_parts(raw) {
+            push(part, &mut words);
+        }
+        push(raw.to_lowercase(), &mut words);
+    }
+    if words.is_empty() {
+        return None;
+    }
+    let meaningful: Vec<String> = words
+        .iter()
+        .filter(|w| w.chars().count() > 1 && !QUERY_STOPWORDS.contains(&w.as_str()))
+        .cloned()
+        .collect();
+    // A query made entirely of function words is still a query: search for
+    // what was asked rather than for nothing at all.
+    let kept = if meaningful.is_empty() {
+        words
+    } else {
+        meaningful
+    };
+    let quoted: Vec<String> = kept
+        .iter()
+        .take(MAX_TERMS)
         .map(|t| format!("\"{t}\"*"))
         .collect();
-    (!terms.is_empty()).then(|| terms.join(" OR "))
+    Some(FtsQuery {
+        any: quoted.join(" OR "),
+        all: (quoted.len() > 1).then(|| quoted.join(" AND ")),
+    })
+}
+
+/// Reciprocal rank fusion: score each id by `1 / (k + rank)` summed over the
+/// lists it appears in, highest first. Ranks rather than scores are fused, so
+/// the passes need no common scale and neither can starve the other. `k = 60`
+/// is the constant from the original paper, and the one the packer uses. Ties
+/// break towards the newer claim.
+fn fuse(lists: &[Vec<String>], limit: usize) -> Vec<String> {
+    let mut score: HashMap<&str, f64> = HashMap::new();
+    let mut seen: Vec<&str> = Vec::new();
+    for list in lists {
+        for (rank, id) in list.iter().enumerate() {
+            let entry = score.entry(id.as_str()).or_insert_with(|| {
+                seen.push(id.as_str());
+                0.0
+            });
+            *entry += 1.0 / (60.0 + rank as f64 + 1.0);
+        }
+    }
+    seen.sort_by(|a, b| {
+        score[b]
+            .partial_cmp(&score[a])
+            .unwrap_or(Ordering::Equal)
+            .then_with(|| b.cmp(a))
+    });
+    seen.into_iter().take(limit).map(str::to_owned).collect()
 }
 
 impl Store for SqliteStore {
@@ -561,21 +708,120 @@ impl Store for SqliteStore {
         self.query_claims(&sql, &params)
     }
 
+    /// Hybrid lexical search: a precise pass (every meaningful word present)
+    /// and a broad one (any of them), fused by reciprocal rank. The precise
+    /// pass alone returns nothing the moment one word is missing; the broad
+    /// pass alone lets a claim sharing one common word with many others
+    /// outrank the claim that answers the question. Fusing them keeps the
+    /// recall of the second and the ordering of the first.
     fn search(&self, query: &str, filter: &Filter) -> Result<Vec<Claim>, SqliteError> {
         let Some(q) = fts_query(query) else {
             return Ok(Vec::new());
         };
-        let mut params = vec![Value::Text(q)];
-        let where_ = filter_sql(filter, &mut params);
         let limit = filter.limit.unwrap_or(50);
-        // bm25 column weights: entities are curated tags, so a tag hit counts
-        // most; `why` is supporting prose, so it counts least.
-        let sql = format!(
-            "SELECT c.body, c.status FROM claims_fts f JOIN claims c ON c.rowid = f.rowid
-             WHERE claims_fts MATCH ?{where_}
-             ORDER BY bm25(claims_fts, 1.0, 0.5, 2.0), c.id LIMIT {limit}"
-        );
-        self.query_claims(&sql, &params)
+        // Fuse over more than was asked for: a claim ranked 60th in one pass
+        // and 3rd in the other belongs near the top of the fused list.
+        let deep = limit.saturating_mul(4).max(50);
+        let mut lists: Vec<Vec<String>> = Vec::new();
+        if let Some(all) = &q.all {
+            lists.push(self.fts_ids(all, filter, deep)?);
+        }
+        lists.push(self.fts_ids(&q.any, filter, deep)?);
+        let ids = fuse(&lists, limit);
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let rank: HashMap<&str, usize> = ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| (id.as_str(), i))
+            .collect();
+        let holes = vec!["?"; ids.len()].join(",");
+        let params: Vec<Value> = ids.iter().map(|id| Value::Text(id.clone())).collect();
+        let mut claims = self.query_claims(
+            &format!("SELECT body, status FROM claims WHERE id IN ({holes})"),
+            &params,
+        )?;
+        claims.sort_by_key(|c| rank[c.id.to_string().as_str()]);
+        Ok(claims)
+    }
+
+    fn neighbors(
+        &self,
+        seeds: &[Ulid],
+        filter: &Filter,
+        limit: usize,
+    ) -> Result<Vec<Ulid>, SqliteError> {
+        if seeds.is_empty() || limit == 0 {
+            return Ok(Vec::new());
+        }
+        let seed_ids: HashSet<String> = seeds.iter().map(ToString::to_string).collect();
+        let holes = vec!["?"; seeds.len()].join(",");
+        let mut params: Vec<Value> = seeds
+            .iter()
+            .map(|s| Value::Text(s.to_string()))
+            .collect::<Vec<_>>();
+        params.extend(params.clone());
+        let mut out: Vec<String> = Vec::new();
+
+        // Supersession first: the history of a hit is the strongest kind of
+        // neighbour, and the one a lexical pass is least likely to find,
+        // because a replacement is usually phrased differently.
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT dst FROM edges WHERE kind = 'supersedes' AND src IN ({holes})
+             UNION
+             SELECT src FROM edges WHERE kind = 'supersedes' AND dst IN ({holes})"
+        ))?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(params.iter()), |r| {
+                r.get::<_, String>(0)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        for id in rows {
+            if !seed_ids.contains(&id) && !out.contains(&id) {
+                out.push(id);
+            }
+        }
+
+        // Then the tags and files the seeds point at. One FTS pass restricted
+        // to those two columns, so prose that happens to mention a filename
+        // does not count as pointing at it.
+        let mut tags: Vec<String> = Vec::new();
+        let seed_params: Vec<Value> = seeds.iter().map(|s| Value::Text(s.to_string())).collect();
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "SELECT entities, refs FROM claims WHERE id IN ({holes})"
+        ))?;
+        let rows = stmt
+            .query_map(rusqlite::params_from_iter(seed_params.iter()), |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        for (entities, refs) in rows {
+            for tag in entities.split_whitespace().chain(refs.split_whitespace()) {
+                let tag = tag.to_lowercase();
+                if tag.chars().count() > 1 && !tags.contains(&tag) {
+                    tags.push(tag);
+                }
+            }
+        }
+        if !tags.is_empty() && out.len() < limit {
+            let terms: Vec<String> = tags
+                .iter()
+                .take(MAX_TERMS)
+                .map(|t| format!("\"{t}\""))
+                .collect();
+            let query = format!("{{entities refs}} : ({})", terms.join(" OR "));
+            for id in self.fts_ids(&query, filter, limit * 2)? {
+                if !seed_ids.contains(&id) && !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        out.truncate(limit);
+        Ok(out
+            .iter()
+            .filter_map(|id| Ulid::from_string(id).ok())
+            .collect())
     }
 
     fn status_history(&self, claim: Ulid) -> Result<Vec<StatusChange>, SqliteError> {
@@ -735,6 +981,14 @@ mod tests {
     fn claim(kind: Kind, text: &str, why: Option<&str>, t: &str) -> Claim {
         let mut d = ClaimDraft::new(kind, text);
         d.why = why.map(str::to_owned);
+        let now = at(t);
+        Claim::from_draft(d, Ulid::from_parts(now.timestamp_millis() as u64, 1), now).unwrap()
+    }
+
+    fn tagged(kind: Kind, text: &str, refs: &[&str], entities: &[&str], t: &str) -> Claim {
+        let mut d = ClaimDraft::new(kind, text);
+        d.refs = refs.iter().map(|s| (*s).to_owned()).collect();
+        d.entities = entities.iter().map(|s| (*s).to_owned()).collect();
         let now = at(t);
         Claim::from_draft(d, Ulid::from_parts(now.timestamp_millis() as u64, 1), now).unwrap()
     }
@@ -935,5 +1189,149 @@ mod tests {
         let s = SqliteStore::open(&path).unwrap();
         assert_eq!(s.stats().unwrap().claims, 0);
         assert_eq!(s.cursor("x").unwrap(), 0);
+    }
+
+    #[test]
+    fn search_finds_claims_by_the_files_they_are_about() {
+        let s = store_with(&[
+            tagged(
+                Kind::Decision,
+                "Budgets are enforced with a compact fallback",
+                &["crates/ctx-pack/src/lib.rs"],
+                &["packer"],
+                "2026-09-01T00:00:00Z",
+            ),
+            claim(
+                Kind::Fact,
+                "The registry is sqlite",
+                None,
+                "2026-09-02T00:00:00Z",
+            ),
+        ]);
+        // The path is in `refs`, not in the text: without refs in the index
+        // there is nothing here to match.
+        for q in ["ctx-pack", "lib.rs", "crates/ctx-pack/src/lib.rs", "packer"] {
+            let hits = s.search(q, &Filter::default()).unwrap();
+            assert_eq!(hits.len(), 1, "{q} found {} claims", hits.len());
+            assert!(hits[0].text.starts_with("Budgets"), "{q}");
+        }
+    }
+
+    #[test]
+    fn search_ranks_a_claim_with_every_word_above_one_with_a_single_word() {
+        let s = store_with(&[
+            claim(
+                Kind::Fact,
+                "The daemon listens on loopback only",
+                None,
+                "2026-09-01T00:00:00Z",
+            ),
+            claim(
+                Kind::Decision,
+                "Pull with rebase so the daemon never rewrites a shard",
+                None,
+                "2026-09-02T00:00:00Z",
+            ),
+            claim(
+                Kind::Fact,
+                "Rebase keeps the log append only",
+                None,
+                "2026-09-03T00:00:00Z",
+            ),
+        ]);
+        // Only the middle claim has both words. The OR pass alone would let
+        // either single-word claim outrank it on term frequency.
+        let hits = s.search("daemon rebase", &Filter::default()).unwrap();
+        assert!(hits[0].text.starts_with("Pull with rebase"), "{hits:#?}");
+        assert_eq!(hits.len(), 3, "the other two are still reachable");
+    }
+
+    #[test]
+    fn search_splits_camel_case_and_ignores_function_words() {
+        let s = store_with(&[
+            claim(
+                Kind::Fact,
+                "Sync is debounced by thirty seconds",
+                None,
+                "2026-09-01T00:00:00Z",
+            ),
+            claim(
+                Kind::Fact,
+                "The index is a disposable cache",
+                None,
+                "2026-09-02T00:00:00Z",
+            ),
+        ]);
+        let hits = s.search("syncNow", &Filter::default()).unwrap();
+        assert_eq!(hits.len(), 1, "camelCase should split into sync + now");
+        // "is a the" are all function words; dropping them must not turn the
+        // query into a match on every claim that contains "the".
+        assert!(
+            s.search("is a the", &Filter::default()).unwrap().len() <= 2,
+            "a query of only function words falls back to searching them"
+        );
+        assert_eq!(
+            s.search("what is the sync about", &Filter::default())
+                .unwrap()[0]
+                .text
+                .starts_with("Sync"),
+            true
+        );
+    }
+
+    #[test]
+    fn neighbors_follow_supersession_and_shared_refs() {
+        let old = tagged(
+            Kind::Decision,
+            "Pull with fast forward only",
+            &["crates/ctx-git/src/sync.rs"],
+            &[],
+            "2026-09-01T00:00:00Z",
+        );
+        let mut d = ClaimDraft::new(Kind::Decision, "Pull with rebase");
+        d.supersedes = Some(old.id);
+        let now = at("2026-09-02T00:00:00Z");
+        let new =
+            Claim::from_draft(d, Ulid::from_parts(now.timestamp_millis() as u64, 1), now).unwrap();
+        let sibling = tagged(
+            Kind::Constraint,
+            "A shard has exactly one writer",
+            &["crates/ctx-git/src/sync.rs"],
+            &[],
+            "2026-09-03T00:00:00Z",
+        );
+        let unrelated = claim(
+            Kind::Fact,
+            "The registry is sqlite",
+            None,
+            "2026-09-04T00:00:00Z",
+        );
+        let s = store_with(&[old.clone(), new.clone(), sibling.clone(), unrelated.clone()]);
+
+        // From the replacement: the claim it replaced, even though the two
+        // share no searchable word beyond "pull with".
+        let n = s.neighbors(&[new.id], &Filter::default(), 10).unwrap();
+        assert!(n.contains(&old.id), "{n:?}");
+        // From the old claim: its replacement, and the constraint on the same
+        // file, but not a claim that shares nothing.
+        let n = s.neighbors(&[old.id], &Filter::default(), 10).unwrap();
+        assert!(n.contains(&new.id) && n.contains(&sibling.id), "{n:?}");
+        assert!(!n.contains(&unrelated.id), "{n:?}");
+        assert!(!n.contains(&old.id), "a seed is not its own neighbour");
+        assert!(s.neighbors(&[], &Filter::default(), 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn fts_query_splits_and_filters() {
+        assert!(fts_query("").is_none());
+        assert!(fts_query("***").is_none());
+        let q = fts_query("the daemon").unwrap();
+        assert_eq!(q.any, "\"daemon\"*");
+        assert!(q.all.is_none(), "one meaningful word needs no AND pass");
+        let q = fts_query("readFile and writeFile").unwrap();
+        // read, file, readfile, write, writefile: "and" is dropped, "file" once.
+        assert_eq!(q.all.unwrap().matches(" AND ").count(), 4);
+        assert_eq!(camel_parts("syncNow"), vec!["sync", "now"]);
+        assert!(camel_parts("sync").is_empty());
     }
 }

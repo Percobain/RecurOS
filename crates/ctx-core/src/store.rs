@@ -77,6 +77,22 @@ pub trait Store {
     /// Full-text search, best match first.
     fn search(&self, query: &str, filter: &Filter) -> Result<Vec<Claim>, Self::Error>;
 
+    /// Claims adjacent to `seeds` in the claim graph, best first, excluding
+    /// the seeds themselves: the claim a seed superseded and the claim that
+    /// superseded it, then claims sharing a ref or an entity tag with a seed.
+    ///
+    /// Words are not the only way one claim is about another. A decision and
+    /// the constraint it had to satisfy often share no vocabulary at all, and
+    /// share a file path instead; a superseded claim rarely repeats the words
+    /// of its replacement. Following those edges is what turns a lexical hit
+    /// into the surrounding context.
+    fn neighbors(
+        &self,
+        seeds: &[Ulid],
+        filter: &Filter,
+        limit: usize,
+    ) -> Result<Vec<Ulid>, Self::Error>;
+
     /// Every status record that targets `claim`, oldest first.
     fn status_history(&self, claim: Ulid) -> Result<Vec<StatusChange>, Self::Error>;
 
