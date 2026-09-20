@@ -3,9 +3,11 @@
 <head>
   <meta charset="utf-8">
   <title>RecurOS</title>
+  <link rel="icon" href="icons/icon32.png">
   <style>
     body { width: 300px; margin: 0; padding: 12px; font: 13px/1.4 system-ui, sans-serif; color: #111; }
-    h1 { font-size: 14px; margin: 0 0 10px; }
+    h1 { font-size: 14px; margin: 0 0 10px; display: flex; align-items: center; gap: 6px; }
+    h1 img { width: 16px; height: 16px; }
     label { display: block; margin: 8px 0 3px; font-weight: 500; }
     select, input { width: 100%; box-sizing: border-box; padding: 5px 6px; font: inherit; }
     .row { display: flex; gap: 6px; margin-top: 12px; }
@@ -21,7 +23,7 @@
   </style>
 </head>
 <body>
-  <h1>RecurOS</h1>
+  <h1><img src="icons/icon32.png" alt=""> RecurOS</h1>
   <label for="branch">Branch</label>
   <select id="branch"><option value="">(active branch)</option></select>
   <div id="docs"></div>

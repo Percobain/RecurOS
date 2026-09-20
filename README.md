@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/recuros-light.svg">
+  <img src="assets/recuros.svg" alt="RecurOS" width="72" height="72">
+</picture>
+
 # RecurOS
 
 **One memory for all your AI tools.**
