@@ -1,5 +1,10 @@
 # RecurOS browser extension
 
+> **Coming soon.** This is built and it loads as an unpacked extension, but it
+> has not been through a real browser end to end or the Chrome Web Store, so it
+> is not part of a release yet. Nothing else needs it: ChatGPT and claude.ai go
+> through the Worker connector, and coding agents run `ctx` directly.
+
 Chrome (MV3) extension for chat surfaces that can't use a custom MCP connector:
 Gemini, free-tier ChatGPT, Perplexity, DeepSeek, and claude.ai/ChatGPT if you
 don't want to use the Worker.

@@ -78,7 +78,11 @@ const RELEASES: Release[] = [
             An <code>npx</code> installer that fetches them, and the shell one-liners wired to
             real release assets.
           </li>
-          <li>The browser extension exercised in an actual browser, not just built.</li>
+          <li>
+            The browser extension. It is built and in the repository, and it is not
+            part of a release until it has been through a real browser and the
+            Chrome Web Store. Everything else works without it.
+          </li>
           <li>
             A <code>ctx setup</code> that walks through the private repo, the token and the
             Worker instead of asking you to read four sections.

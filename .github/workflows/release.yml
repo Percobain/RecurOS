@@ -17,7 +17,10 @@ jobs:
         include:
           - { target: x86_64-unknown-linux-gnu, os: ubuntu-latest, archive: tar.gz }
           - { target: aarch64-unknown-linux-gnu, os: ubuntu-24.04-arm, archive: tar.gz }
-          - { target: x86_64-apple-darwin, os: macos-13, archive: tar.gz }
+          # Both macOS targets build on the Apple silicon runner: the x86_64
+          # one cross-compiles, which the shipped SDK handles, and the Intel
+          # runners are being retired.
+          - { target: x86_64-apple-darwin, os: macos-latest, archive: tar.gz }
           - { target: aarch64-apple-darwin, os: macos-latest, archive: tar.gz }
           - { target: x86_64-pc-windows-msvc, os: windows-latest, archive: zip }
     runs-on: ${{ matrix.os }}
@@ -27,6 +30,11 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - run: cargo build --release --locked -p ctx-cli --target ${{ matrix.target }}
+      - name: It runs
+        # A binary that cannot start is worse than no binary. Skipped where the
+        # build is a cross-compile and the runner cannot execute the result.
+        if: matrix.target != 'x86_64-apple-darwin'
+        run: target/${{ matrix.target }}/release/ctx --version
       - name: Package (unix)
         if: matrix.archive == 'tar.gz'
         run: |

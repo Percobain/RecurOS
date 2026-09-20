@@ -476,7 +476,7 @@ cd worker && npm ci && npm test   # the Cloudflare Worker
 | `crates/ctx-core`, `ctx-store-sqlite`, `ctx-git`, `ctx-branch`, `ctx-pack` | storage, sync, branches, the briefing compiler |
 | `crates/ctx-mcp`, `ctx-daemon`, `ctx-wire`                                 | the AI tool connections                        |
 | `worker/`                                                                  | the Cloudflare Worker (ChatGPT / claude.ai)    |
-| `extension/`                                                               | the browser extension                          |
+| `extension/`                                                               | the browser extension (coming soon)            |
 
 
 ---
