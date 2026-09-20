@@ -1,4 +1,4 @@
-//! The ContextOS MCP server: exactly five tools (spec §9.1).
+//! The RecurOS MCP server: exactly five tools (spec §9.1).
 //!
 //! Every tool schema is permanent per-turn context tax, so there are five
 //! and their descriptions are terse. Anything else is discoverable through
@@ -262,7 +262,7 @@ pub fn handle(app: &mut App, msg: &Value, wrote: &mut bool) -> Option<Value> {
             Ok(json!({
                 "protocolVersion": version,
                 "capabilities": {"tools": {"listChanged": false}},
-                "serverInfo": {"name": "contextos", "version": ctx_app::VERSION},
+                "serverInfo": {"name": "recuros", "version": ctx_app::VERSION},
                 "instructions": format!(
                     "Project context for branch {active}. Call ctx_index for an overview. \
                      Save with ctx_append only when the user asks."

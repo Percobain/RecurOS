@@ -1,6 +1,6 @@
 //! Canonical byte form of a claim's content, and its content address (CID).
 //!
-//! This is the one place in ContextOS where a subtle bug corrupts data instead
+//! This is the one place in RecurOS where a subtle bug corrupts data instead
 //! of crashing: if two machines (or the Rust binary and the TypeScript Worker)
 //! disagree on a single byte, dedup silently breaks and Merkle roots never
 //! match. So every rule here is explicit, and `docs/canonical.md` is the

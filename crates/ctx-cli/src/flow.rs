@@ -26,7 +26,7 @@ pub fn new(home: &CtxHome, name: &str) -> Result<()> {
     crate::sync_now(&mut app, false)?;
     println!("Started `{project}`. Research now goes to {research}.\n");
     println!("Where to do the research:");
-    println!("  claude.ai / ChatGPT   with the ContextOS connector (worker/README.md), just talk;");
+    println!("  claude.ai / ChatGPT   with the RecurOS connector (worker/README.md), just talk;");
     println!(
         "                        say \"save that\" to record findings, \"ctx spec\" when you're done"
     );

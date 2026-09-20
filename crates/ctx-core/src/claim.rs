@@ -1,4 +1,4 @@
-//! The claim: the single record type everything in ContextOS is made of.
+//! The claim: the single record type everything in RecurOS is made of.
 
 use std::collections::BTreeMap;
 use std::fmt;

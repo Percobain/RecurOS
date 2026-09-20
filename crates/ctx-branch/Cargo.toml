@@ -1,6 +1,6 @@
 [package]
 name = "ctx-branch"
-description = "Branch DAG, scoped inheritance and routing for ContextOS"
+description = "Branch DAG, scoped inheritance and routing for RecurOS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

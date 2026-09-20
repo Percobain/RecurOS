@@ -1,4 +1,4 @@
-// ContextOS content script.
+// RecurOS content script.
 //
 // Two jobs, both deliberately narrow:
 //  1. Insert plain markdown into the chat composer when asked.

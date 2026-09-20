@@ -81,7 +81,7 @@ impl Binding {
         let _ = fs::remove_file(dir.join(LEGACY_BINDING_FILE));
         let path = dir.join(BINDING_FILE);
         let body = format!(
-            "# ContextOS binding: which context branch this repo's agents use.\n\
+            "# RecurOS binding: which context branch this repo's agents use.\n\
              # Commit this file. See `ctx --help`.\n\
              project: {}\nbranch: {}\n",
             self.project, self.branch

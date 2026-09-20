@@ -1,6 +1,6 @@
 [package]
 name = "ctx-cli"
-description = "The `ctx` command-line interface for ContextOS"
+description = "The `ctx` command-line interface for RecurOS"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,4 +1,4 @@
-//! `ctx` — the ContextOS command-line interface.
+//! `ctx` — the RecurOS command-line interface.
 
 mod clipboard;
 mod doctor;
@@ -25,8 +25,8 @@ use ctx_wire::Agent;
 #[command(
     name = "ctx",
     version,
-    about = "ContextOS: one shared, versioned memory for every AI tool you use",
-    long_about = "ContextOS: one shared, versioned memory for every AI tool you use.\n\n\
+    about = "RecurOS: one shared, versioned memory for every AI tool you use",
+    long_about = "RecurOS: one shared, versioned memory for every AI tool you use.\n\n\
         Save decisions, constraints and rejected ideas once; every agent (Claude Code, Codex, \
         Cursor, Gemini, claude.ai, ChatGPT, local models) gets a compiled, token-budgeted view.\n\n\
         Start with `ctx init` inside a project.",
@@ -149,7 +149,7 @@ enum Command {
         /// Copy to the clipboard instead of printing.
         #[arg(long)]
         clip: bool,
-        /// Write to a file. For AGENTS.md, only the ContextOS section is replaced.
+        /// Write to a file. For AGENTS.md, only the RecurOS section is replaced.
         #[arg(long)]
         out: Option<PathBuf>,
     },
@@ -716,7 +716,7 @@ fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Reindex => {
             if !home.exists() {
-                bail!("no ContextOS store at {}", home.root().display());
+                bail!("no RecurOS store at {}", home.root().display());
             }
             let start = Instant::now();
             let mut app = App::open(home.clone(), None)?;
@@ -1064,14 +1064,14 @@ fn init(
     app.refresh_agents_md()?;
     let spec = app.refresh_spec_file()?;
 
-    println!("ContextOS: {project}/{branch}");
+    println!("RecurOS: {project}/{branch}");
     if created_store {
         println!("  created store at {}", home.root().display());
     }
     println!(
         "  ✓ .ctx/       config.yaml binds this repo to {project}/{branch}; commands.md for agents (commit it)"
     );
-    println!("  ✓ AGENTS.md   ContextOS section added; your own content is kept (commit it)");
+    println!("  ✓ AGENTS.md   RecurOS section added; your own content is kept (commit it)");
     match spec {
         ctx_app::SpecFile::Written | ctx_app::SpecFile::Unchanged => {
             println!("  ✓ .ctx/SPEC.md  the spec from {project}'s research")
@@ -1332,12 +1332,12 @@ fn session_start(home: &CtxHome) -> Result<()> {
     }
     if let Ok(ctx_app::SpecFile::Written) = app.refresh_spec_file() {
         println!(
-            "ContextOS: a new version of the spec was saved since your last session; .ctx/SPEC.md is updated. Re-read it before continuing.\n"
+            "RecurOS: a new version of the spec was saved since your last session; .ctx/SPEC.md is updated. Re-read it before continuing.\n"
         );
     }
     if let Some(block) = app.refresh_agents_md()? {
         println!(
-            "ContextOS: this project's context changed since AGENTS.md was loaded. Current version:\n\n{block}"
+            "RecurOS: this project's context changed since AGENTS.md was loaded. Current version:\n\n{block}"
         );
     }
     Ok(())

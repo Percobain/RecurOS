@@ -1,4 +1,4 @@
-//! The ContextOS compiler (spec §8): compile a `(branch, task, budget)` triple
+//! The RecurOS compiler (spec §8): compile a `(branch, task, budget)` triple
 //! into a projection.
 //!
 //! This crate is pure. `compile` takes the candidate pool, optional retrieval

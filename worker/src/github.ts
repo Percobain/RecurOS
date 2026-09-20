@@ -57,7 +57,7 @@ async function gh(env: Env, path: string, init: RequestInit = {}): Promise<Respo
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
       "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "contextos-worker",
+      "User-Agent": "recuros-worker",
       ...(init.body ? { "Content-Type": "application/json" } : {}),
     },
   });

@@ -1,6 +1,6 @@
 [package]
 name = "ctx-daemon"
-description = "ContextOS local HTTP daemon (loopback only) for the browser extension"
+description = "RecurOS local HTTP daemon (loopback only) for the browser extension"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

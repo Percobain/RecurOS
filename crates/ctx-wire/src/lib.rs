@@ -1,4 +1,4 @@
-//! Wiring ContextOS into coding agents (spec §12).
+//! Wiring RecurOS into coding agents (spec §12).
 //!
 //! There is no universal hook layer, so this is deliberately conservative:
 //!
@@ -188,7 +188,7 @@ pub fn ensure_mcp_json(path: &Path, command: &str, what: &str) -> Step {
 }
 
 /// Claude Code SessionStart hook, in the *local* (uncommitted) settings file
-/// so teammates without ContextOS don't get a failing hook.
+/// so teammates without RecurOS don't get a failing hook.
 pub fn ensure_claude_hook(repo: &Path, command: &str) -> Step {
     let path = repo.join(".claude").join("settings.local.json");
     let step = |outcome| Step {

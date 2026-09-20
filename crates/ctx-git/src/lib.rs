@@ -1,4 +1,4 @@
-//! The on-disk side of ContextOS: the `~/ctx` layout and the sharded,
+//! The on-disk side of RecurOS: the `~/ctx` layout and the sharded,
 //! append-only log that is the only source of truth (spec §6).
 //!
 //! Sync design in one sentence: every writer owns exactly one shard directory

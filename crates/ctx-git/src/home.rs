@@ -1,4 +1,4 @@
-//! Locating and initialising the ContextOS home directory (`~/ctx`).
+//! Locating and initialising the RecurOS home directory (`~/ctx`).
 
 use std::fs;
 use std::io;
@@ -39,7 +39,7 @@ const GITATTRIBUTES: &str = "\
 log/**/*.jsonl merge=union
 ";
 
-/// The ContextOS home: a single private git repo holding the log.
+/// The RecurOS home: a single private git repo holding the log.
 #[derive(Debug, Clone)]
 pub struct CtxHome {
     root: PathBuf,

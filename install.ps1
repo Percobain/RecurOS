@@ -1,12 +1,12 @@
-# Install the `ctx` binary (ContextOS) on Windows.
+# Install the `ctx` binary (RecurOS) on Windows.
 #
-#   irm https://raw.githubusercontent.com/Percobain/ContextOS/main/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/Percobain/RecurOS/main/install.ps1 | iex
 #
 # Installs to %LOCALAPPDATA%\Programs\ctx and adds it to your user PATH.
 # No Docker, Node, Python or admin rights needed.
 $ErrorActionPreference = 'Stop'
 
-$Repo = if ($env:CTX_REPO) { $env:CTX_REPO } else { 'Percobain/ContextOS' }
+$Repo = if ($env:CTX_REPO) { $env:CTX_REPO } else { 'Percobain/RecurOS' }
 $Dir = if ($env:CTX_INSTALL_DIR) { $env:CTX_INSTALL_DIR } else { Join-Path $env:LOCALAPPDATA 'Programs\ctx' }
 $Url = "https://github.com/$Repo/releases/latest/download/ctx-x86_64-pc-windows-msvc.zip"
 

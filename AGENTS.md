@@ -13,9 +13,11 @@ Compiled by ContextOS. These are settled; build on them.
 
 ### Decisions
 
+- ctx log hides deleted claims unless given --all (`crates/ctx-cli/src/main.rs`) [c:f036]
 - Release timing guards run in CI on Linux and macOS only; Windows CI runs the full suite for correctness (`.github/workflows/ci.yml`) [c:9850]
 - The Worker is deployed before its secrets are set (`README.md`) [c:483e]
-- ctx log hides deleted claims unless given --all (`crates/ctx-cli/src/main.rs`) [c:f036]
+- Kind is not a facility-location coverage feature in the packer (`crates/ctx-pack/src/lib.rs`) [c:57b0]
+- One binary: the daemon is ctx daemon, not a separate ctxd [c:c42a]
 - The Claude Code SessionStart hook lives in .claude/settings.local.json (`crates/ctx-wire/src/lib.rs`) [c:9309]
 - License is Apache-2.0 (`LICENSE`) [c:ad79]
 - Adopt the metro-map view as ctx map: branches are lines, claims are stations, colour is the kind _(research)_ [c:a033]
@@ -23,14 +25,12 @@ Compiled by ContextOS. These are settled; build on them.
 - Pull with git pull --rebase, not --ff-only (`crates/ctx-git/src/sync.rs`) [c:32a2]
 - Golden CIDs are asserted as literals produced by an independent Python implementation (`tests/golden/reference.py`) [c:51a7]
 - Specs are a separate doc log record, not a seventh claim kind (`crates/ctx-app/src/docs.rs`, `crates/ctx-core/src/record.rs`) [c:bb1b]
-- Kind is not a facility-location coverage feature in the packer (`crates/ctx-pack/src/lib.rs`) [c:57b0]
-- One binary: the daemon is ctx daemon, not a separate ctxd [c:c42a]
 
 ### Rejected: do not propose these again
 
-- Moving AGENTS.md into .ctx/ [c:a320]
 - Agents saving automatically without being asked [c:cf9e]
 - Injecting context into every prompt [c:3a38]
+- Moving AGENTS.md into .ctx/ [c:a320]
 - Porting code from yubinbin32-ops/ContextOS _(research)_ [c:1ed6]
 - Fast-forward-only pulls [c:dac8]
 
@@ -40,5 +40,5 @@ Save only when I explicitly say so, plus one batched call at session end.
 Use ctx_append(kind, text, why, refs). Don't log progress or summaries.
 Cross-branch material: ctx_propose(target_branch, ...).
 For anything else ContextOS does (new idea, spec, build, delete, sync, map, handoff), run the `ctx` CLI yourself; commands are in `.ctx/commands.md` (or `ctx commands`). Ask before deleting.
-<!-- ctx/1 b=contextos/code n=18 t=619/700 root=b3:1369d593 gen=01M2V60F v=0.1.0 -->
+<!-- ctx/1 b=contextos/code n=18 t=619/700 root=b3:1369d593 gen=01M2V7DV v=0.1.0 -->
 <!-- ctx:end -->

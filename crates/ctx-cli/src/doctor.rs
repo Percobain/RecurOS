@@ -67,7 +67,7 @@ pub fn run(home: CtxHome, cwd: &Path) -> bool {
     println!("\ngit sync");
     if ctx_wire::which("git").is_none() {
         r.warn(
-            "git is not installed: ContextOS works, but won't sync",
+            "git is not installed: RecurOS works, but won't sync",
             "install git to sync between machines",
         );
     } else if !sync::is_repo(&home) {
@@ -107,7 +107,7 @@ pub fn run(home: CtxHome, cwd: &Path) -> bool {
             let agents_md = b.root.join("AGENTS.md");
             if !ctx_app::agents_md::has_block(&b.root) {
                 r.fail(
-                    "AGENTS.md has no ContextOS section",
+                    "AGENTS.md has no RecurOS section",
                     "`ctx init` (or `ctx pack --out AGENTS.md`)",
                 );
             } else {

@@ -1,4 +1,4 @@
-// ContextOS Cloudflare Worker: a stateless MCP server (JSON-RPC over HTTP)
+// RecurOS Cloudflare Worker: a stateless MCP server (JSON-RPC over HTTP)
 // at POST /mcp/<CTX_SECRET>. No sessions, no state between requests, so any
 // request can land on any instance.
 
@@ -47,9 +47,9 @@ async function handle(env: Env, req: RpcRequest): Promise<RpcResponse | null> {
         result: {
           protocolVersion: typeof requested === "string" ? requested : DEFAULT_PROTOCOL,
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "contextos", version: VERSION },
+          serverInfo: { name: "recuros", version: VERSION },
           instructions:
-            "ContextOS holds curated project context. Call ctx_index first, then ctx_pack for a branch. " +
+            "RecurOS holds curated project context. Call ctx_index first, then ctx_pack for a branch. " +
             "Save with ctx_append only when the user explicitly asks.",
         },
       };
@@ -103,7 +103,7 @@ export default {
           rpcError(
             null,
             -32000,
-            "ContextOS daily budget guard: this Worker is capped at 62 requests/minute " +
+            "RecurOS daily budget guard: this Worker is capped at 62 requests/minute " +
               "(about 89,000/day, under the Cloudflare free plan's 100,000/day). " +
               "The limit resets within a minute; try again shortly.",
           ),

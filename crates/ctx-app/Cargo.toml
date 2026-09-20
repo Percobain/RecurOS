@@ -1,6 +1,6 @@
 [package]
 name = "ctx-app"
-description = "ContextOS service layer shared by the CLI, MCP server and daemon"
+description = "RecurOS service layer shared by the CLI, MCP server and daemon"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

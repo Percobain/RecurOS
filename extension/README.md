@@ -1,4 +1,4 @@
-# ContextOS browser extension
+# RecurOS browser extension
 
 Chrome (MV3) extension for chat surfaces that can't use a custom MCP connector:
 Gemini, free-tier ChatGPT, Perplexity, DeepSeek, and claude.ai/ChatGPT if you
@@ -60,7 +60,7 @@ The popup shows the selected branch's documents under the branch picker
 
 ## Use
 
-**Give a chat your context.** Click the ContextOS toolbar icon, pick a branch,
+**Give a chat your context.** Click the RecurOS toolbar icon, pick a branch,
 optionally type a task (this narrows the pack to what's relevant), and click
 **Insert context**. Or press **Alt+Shift+C** in the composer to insert the pack
 for your default branch. **Copy** puts the pack on the clipboard instead.

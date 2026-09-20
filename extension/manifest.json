@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "ContextOS",
+  "name": "RecurOS",
   "version": "0.1.0",
-  "description": "Insert compiled ContextOS packs into chat composers, and save ctx-claims blocks back to your local store.",
+  "description": "Insert compiled RecurOS packs into chat composers, and save ctx-claims blocks back to your local store.",
   "permissions": ["storage", "activeTab", "scripting"],
   "host_permissions": ["http://127.0.0.1:7777/*"],
   "background": {
@@ -23,7 +23,7 @@
     }
   ],
   "action": {
-    "default_title": "ContextOS",
+    "default_title": "RecurOS",
     "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon16.png",

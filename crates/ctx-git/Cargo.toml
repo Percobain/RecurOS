@@ -1,6 +1,6 @@
 [package]
 name = "ctx-git"
-description = "ContextOS home layout, sharded append-only log, and git sync"
+description = "RecurOS home layout, sharded append-only log, and git sync"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

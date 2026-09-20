@@ -1,4 +1,4 @@
-"""Independent reference implementation of the ContextOS canonical form.
+"""Independent reference implementation of the RecurOS canonical form.
 
 This exists so the golden CIDs asserted in Rust are not derived from the Rust
 code under test. It follows docs/canonical.md, using only Python's stdlib for

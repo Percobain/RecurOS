@@ -1,4 +1,4 @@
-//! Core data model for ContextOS.
+//! Core data model for RecurOS.
 //!
 //! Everything else in the workspace depends on this crate, so it stays small:
 //! the claim type, the canonical byte form that content addresses are computed

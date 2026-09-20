@@ -1,8 +1,8 @@
-# ContextOS Worker: claude.ai & ChatGPT connector
+# RecurOS Worker: claude.ai & ChatGPT connector
 
 A tiny, stateless [MCP](https://modelcontextprotocol.io) server on Cloudflare
 Workers. It gives claude.ai and ChatGPT the same five `ctx_*` tools your local
-agents have, reading and writing your ContextOS store through a **private
+agents have, reading and writing your RecurOS store through a **private
 GitHub repo**. No extension needed, and it fits in the free tier.
 
 ```
@@ -16,7 +16,7 @@ claude.ai / ChatGPT ──MCP──▶ Worker ──GitHub API──▶ your pri
 
 ## What you need
 
-- ContextOS installed locally, with some claims saved (`ctx save ...`)
+- RecurOS installed locally, with some claims saved (`ctx save ...`)
 - A GitHub account
 - A Cloudflare account (free)
 - Node.js 18+
@@ -78,12 +78,12 @@ Deploy:
 npx wrangler deploy
 ```
 
-Wrangler prints your Worker URL, e.g. `https://contextos.<you>.workers.dev`.
+Wrangler prints your Worker URL, e.g. `https://recuros.<you>.workers.dev`.
 
 Your connector URL is:
 
 ```
-https://contextos.<you>.workers.dev/mcp/<CTX_SECRET>
+https://recuros.<you>.workers.dev/mcp/<CTX_SECRET>
 ```
 
 > **This URL is the password.** Anyone with it can read and write your
@@ -162,7 +162,7 @@ laptop with `ctx use` or `ctx new`), or `default` if there is none.
   in practice.
 - **It is bring-your-own-account by design.** Every user deploys this Worker
   to their own free Cloudflare account and points it at their own private
-  GitHub repo. Nobody shares a quota, and there is no ContextOS server whose
+  GitHub repo. Nobody shares a quota, and there is no RecurOS server whose
   bill could grow.
 
 ## Troubleshooting

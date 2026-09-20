@@ -107,7 +107,7 @@ Active branch: {branch}. The context above is compiled; don't re-derive it.
 Save only when I explicitly say so, plus one batched call at session end.
 Use ctx_append(kind, text, why, refs). Don't log progress or summaries.
 Cross-branch material: ctx_propose(target_branch, ...).
-For anything else ContextOS does (new idea, spec, build, delete, sync, map, handoff), run the `ctx` CLI yourself; commands are in `.ctx/commands.md` (or `ctx commands`). Ask before deleting.
+For anything else RecurOS does (new idea, spec, build, delete, sync, map, handoff), run the `ctx` CLI yourself; commands are in `.ctx/commands.md` (or `ctx commands`). Ask before deleting.
 ";
 
 const CLAIMS_PROTOCOL: &str = "---
@@ -225,11 +225,11 @@ pub fn bullet_chars(c: &Claim, branch: &str) -> (usize, usize) {
 fn header(p: Projection, branch: &str) -> String {
     match p {
         Projection::AgentsMd => format!(
-            "## Project context: {branch}\n\nCompiled by ContextOS. These are settled; build on them.\n\n"
+            "## Project context: {branch}\n\nCompiled by RecurOS. These are settled; build on them.\n\n"
         ),
         Projection::Markdown => format!("# Context: {branch}\n\n"),
         Projection::Dossier => format!(
-            "# Context dossier: {branch}\n\nWhat is known about this project, compiled by ContextOS. Treat it as background you already agreed with.\n\n"
+            "# Context dossier: {branch}\n\nWhat is known about this project, compiled by RecurOS. Treat it as background you already agreed with.\n\n"
         ),
         Projection::Prose => format!(
             "# Handoff: {branch}\n\nEverything recorded about this work: where it stands, why, what was ruled out, and where to start.\n\n"
@@ -348,7 +348,7 @@ pub struct IndexEntry {
 /// The ~250-token overview returned first over MCP: what exists, pulled on
 /// demand (progressive disclosure).
 pub fn render_index(entries: &[IndexEntry], active: Option<&str>, budget: u32) -> String {
-    let mut out = String::from("# ContextOS index\n\n");
+    let mut out = String::from("# RecurOS index\n\n");
     if let Some(a) = active {
         let _ = writeln!(out, "Current branch: `{a}`\n");
     }

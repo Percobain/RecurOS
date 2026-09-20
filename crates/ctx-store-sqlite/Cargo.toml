@@ -1,6 +1,6 @@
 [package]
 name = "ctx-store-sqlite"
-description = "SQLite + FTS5 index for ContextOS (a disposable cache over the log)"
+description = "SQLite + FTS5 index for RecurOS (a disposable cache over the log)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

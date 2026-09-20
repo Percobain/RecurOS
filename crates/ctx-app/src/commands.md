@@ -1,7 +1,7 @@
-# ContextOS commands (for AI agents)
+# RecurOS commands (for AI agents)
 
 You can run the `ctx` CLI yourself whenever the user asks for something
-ContextOS does. The user does not need to know these commands. Rules:
+RecurOS does. The user does not need to know these commands. Rules:
 
 - Save only when the user explicitly asks. Never log progress or summaries.
 - Ask the user before any delete, and say exactly what will be deleted.

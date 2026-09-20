@@ -93,7 +93,7 @@ describe("router", () => {
     const res = await rpc({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2026-07-28" } });
     const body = (await res.json()) as { result: { protocolVersion: string; serverInfo: { name: string } } };
     expect(body.result.protocolVersion).toBe("2026-07-28");
-    expect(body.result.serverInfo.name).toBe("contextos");
+    expect(body.result.serverInfo.name).toBe("recuros");
   });
 
   it("notifications get 202 with no body", async () => {
@@ -258,7 +258,7 @@ describe("active branch", () => {
   it("tools default to refs/active and ctx_index reports it", async () => {
     const puts = fakeGitHub({
       "refs/active": "idea/research\n",
-      "packs/index.md": "# ContextOS index\n\nCurrent branch: `default`\n",
+      "packs/index.md": "# RecurOS index\n\nCurrent branch: `default`\n",
     });
     const idx = await call("ctx_index", {});
     expect(idx.text).toMatch(/Current branch: `idea\/research`/);

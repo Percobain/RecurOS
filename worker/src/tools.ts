@@ -428,13 +428,13 @@ export function renderClaims(claims: LoggedClaim[]): string {
 
 const VISIBLE = new Set(["active", "superseded"]);
 
-// Everything the Worker serves goes to a chat that has the ContextOS tools,
+// Everything the Worker serves goes to a chat that has the RecurOS tools,
 // so saving means calling a tool. The laptop's compiled dossiers end with the
 // copy-paste protocol (fenced ctx-claims / ctx-spec blocks) meant for chats
 // WITHOUT a connector; a connected model that follows it prints the spec
 // instead of saving it. So that protocol is swapped for this one.
 const CHAT_PROTOCOL =
-  "---\nYou have the ContextOS tools. When I say \"save\" or \"ctx save\", call ctx_append (one call per claim, with kind, text and why). " +
+  "---\nYou have the RecurOS tools. When I say \"save\" or \"ctx save\", call ctx_append (one call per claim, with kind, text and why). " +
   'When I say "ctx spec", write the complete spec for what we discussed as markdown and SAVE it: call ctx_append with kind "decision", ' +
   "a one-line summary as text, and the full markdown in doc. Do not just print it. Then confirm in one line.\n";
 
@@ -465,7 +465,7 @@ export function renderIndex(claims: LoggedClaim[], docs: LoggedDoc[], active: st
     byBranch.set(c.branch, e);
   }
   for (const d of docs) if (!byBranch.has(d.branch)) byBranch.set(d.branch, { n: 0, last: d.id });
-  let out = `# ContextOS index\n\nCurrent branch: \`${active}\`\n\n`;
+  let out = `# RecurOS index\n\nCurrent branch: \`${active}\`\n\n`;
   if (byBranch.size === 0) out += "_Nothing saved yet._\n";
   for (const [b, e] of [...byBranch.entries()].sort((a, c) => (a[1].last < c[1].last ? 1 : -1))) {
     const ds = docs.filter((d) => d.branch === b).map((d) => `${d.name}: "${d.title}"`);

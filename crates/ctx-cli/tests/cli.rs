@@ -101,7 +101,7 @@ fn init_wires_a_repo_and_packs_follow_the_binding() {
     std::fs::write(repo.join("AGENTS.md"), "# Acme\n\nRun make test.\n").unwrap();
 
     let out = ok(&ctx(&home, &repo, &["init", "--agents", "claude-code"]));
-    assert!(out.contains("ContextOS: acme-api/code"), "{out}");
+    assert!(out.contains("RecurOS: acme-api/code"), "{out}");
     assert!(repo.join(".ctx/config.yaml").exists());
     assert!(repo.join(".mcp.json").exists());
     assert_eq!(

@@ -1,6 +1,6 @@
 [package]
 name = "ctx-pack"
-description = "The ContextOS compiler: budgeted submodular packing and renderers"
+description = "The RecurOS compiler: budgeted submodular packing and renderers"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

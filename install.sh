@@ -1,13 +1,13 @@
 #!/bin/sh
-# Install the `ctx` binary (ContextOS) on macOS or Linux.
+# Install the `ctx` binary (RecurOS) on macOS or Linux.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Percobain/ContextOS/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/Percobain/RecurOS/main/install.sh | sh
 #
 # Installs to ~/.local/bin (override with CTX_INSTALL_DIR). No root, no
 # runtime dependencies: ctx is a single static-ish binary with SQLite built in.
 set -eu
 
-REPO="${CTX_REPO:-Percobain/ContextOS}"
+REPO="${CTX_REPO:-Percobain/RecurOS}"
 DIR="${CTX_INSTALL_DIR:-$HOME/.local/bin}"
 
 os=$(uname -s)

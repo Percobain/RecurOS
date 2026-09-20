@@ -1,4 +1,4 @@
-//! The ContextOS service layer.
+//! The RecurOS service layer.
 //!
 //! Every surface — the `ctx` CLI, the MCP server, the local HTTP daemon —
 //! performs the same operations: route to a branch, save, propose, compile a

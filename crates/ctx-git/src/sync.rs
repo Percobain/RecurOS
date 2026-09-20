@@ -180,7 +180,7 @@ fn identity_args(dir: &Path) -> Vec<&'static str> {
     } else {
         vec![
             "-c",
-            "user.name=ContextOS",
+            "user.name=RecurOS",
             "-c",
             "user.email=ctx@localhost",
         ]

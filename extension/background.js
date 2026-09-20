@@ -1,4 +1,4 @@
-// ContextOS background service worker.
+// RecurOS background service worker.
 //
 // This is the ONLY place that talks to ctxd. Content scripts cannot fetch
 // http://127.0.0.1 because claude.ai / chatgpt.com page CSP blocks it (the

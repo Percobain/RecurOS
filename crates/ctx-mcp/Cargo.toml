@@ -1,6 +1,6 @@
 [package]
 name = "ctx-mcp"
-description = "ContextOS MCP server: the five ctx tools over stdio"
+description = "RecurOS MCP server: the five ctx tools over stdio"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -1,6 +1,6 @@
 # Canonical form, content addresses and Merkle roots
 
-This document is normative. Every implementation that computes a ContextOS
+This document is normative. Every implementation that computes a RecurOS
 content address must follow it byte for byte. Today there are three: the
 Rust core (`crates/ctx-core/src/canonical.rs`, `jcs.rs`, `merkle.rs`), the
 Cloudflare Worker (`worker/src/canonical.ts`), and an independent Python
@@ -8,7 +8,7 @@ reference used only to produce test expectations
 (`tests/golden/reference.py`).
 
 Each rule below is followed by the reason it exists. The reasons matter
-because this is the one part of ContextOS where a subtle mistake corrupts
+because this is the one part of RecurOS where a subtle mistake corrupts
 data instead of crashing. If two implementations disagree by a single byte,
 the same claim gets two different addresses: deduplication silently stops
 working, and Merkle roots computed on two machines never match.
@@ -248,7 +248,7 @@ and its internal tree structure fits the Merkle roots we build on top.
 
 *Why hexadecimal and not base64:* hex is unambiguous, case-stable after
 lowercasing, safe in file names and URLs, and readable by people and
-models. ContextOS never puts base64 in anything a model reads, because
+models. RecurOS never puts base64 in anything a model reads, because
 models cannot reliably decode it and it tokenises poorly.
 
 *Why the `b3:` prefix:* it names the algorithm. If the hash function ever has
