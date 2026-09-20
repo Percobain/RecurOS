@@ -80,30 +80,34 @@ That's the whole product. The rest of this page is setup.
 
 ## 1. Install
 
-You need **git** and **Rust** (Rust is only needed to build `ctx`; nothing else).
+One command, nothing to install first. You need [git](https://git-scm.com/downloads)
+for syncing later, but not for this.
 
+**macOS and Linux**
 
-|      | Install                                                                      |
-| ---- | ---------------------------------------------------------------------------- |
-| git  | [git-scm.com/downloads](https://git-scm.com/downloads)                       |
-| Rust | [rustup.rs](https://rustup.rs) (on Windows, accept the defaults it suggests) |
+```sh
+curl -fsSL https://recuros.vercel.app/install.sh | sh
+```
 
+**Windows** (PowerShell)
 
-Then, in a terminal (PowerShell on Windows, Terminal on macOS/Linux), one line:
+```powershell
+irm https://recuros.vercel.app/install.ps1 | iex
+```
+
+That downloads a single binary for your machine and puts it on your PATH. No
+Docker, no Node, no Python, no admin rights.
+
+<details>
+<summary>Or build it yourself (needs <a href="https://rustup.rs">Rust</a>)</summary>
 
 ```sh
 cargo install --git https://github.com/Percobain/RecurOS ctx-cli --locked
 ```
 
-Or, if you'd rather have the source too:
+</details>
 
-```sh
-git clone https://github.com/Percobain/RecurOS.git
-cd RecurOS
-cargo install --path crates/ctx-cli --locked
-```
-
-This takes a few minutes the first time. Check it worked:
+Check it worked:
 
 ```sh
 ctx --version
@@ -111,7 +115,8 @@ ctx --version
 
 That's it: one program called `ctx`. No Docker, no database, no account.
 
-> Prebuilt downloads (no Rust needed) will come with the first release.
+Every binary is built by GitHub Actions from the tag and published with a
+`SHA256SUMS` file, on the [releases page](https://github.com/Percobain/RecurOS/releases).
 
 ---
 

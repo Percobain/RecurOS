@@ -12,15 +12,18 @@ type Release = {
 
 const RELEASES: Release[] = [
   {
-    version: "unreleased",
-    date: "in progress",
+    version: "v0.1.0",
+    date: "2026-09-20",
     state: "now",
-    title: "Retrieval, onboarding and a name",
+    title: "First release",
     body: (
       <>
         <p>
-          The work since the core landed. Install from <code>main</code> until the first tag:{" "}
-          <code>cargo install --git https://github.com/Percobain/RecurOS ctx-cli</code>.
+          Prebuilt binaries for macOS (Intel and Apple silicon), Linux (x86_64 and arm64)
+          and Windows, each built by GitHub Actions from the tag and published beside a{" "}
+          <code>SHA256SUMS</code> file. Install with{" "}
+          <code>curl -fsSL https://recuros.vercel.app/install.sh | sh</code>, or{" "}
+          <code>irm https://recuros.vercel.app/install.ps1 | iex</code> on Windows.
         </p>
         <ul>
           <li>
@@ -63,20 +66,17 @@ const RELEASES: Release[] = [
     ),
   },
   {
-    version: "v0.1.0",
+    version: "next",
     date: "planned",
     state: "next",
-    title: "First tagged release",
+    title: "What comes after",
     body: (
       <>
-        <p>What has to be true before a version number means anything:</p>
+        <p>Not in v0.1.0, and wanted:</p>
         <ul>
           <li>
-            Prebuilt binaries for macOS, Linux and Windows, so installing does not require Rust.
-          </li>
-          <li>
-            An <code>npx</code> installer that fetches them, and the shell one-liners wired to
-            real release assets.
+            An <code>npx</code> installer, for people who have Node but not a shell they trust
+            with a pipe.
           </li>
           <li>
             The browser extension. It is built and in the repository, and it is not

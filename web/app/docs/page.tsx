@@ -12,21 +12,31 @@ export default function Docs() {
       </p>
 
       <h2>Install</h2>
+      <p>One command. A single binary, with nothing to install before it.</p>
       <p>
-        You need <a href="https://git-scm.com/downloads">git</a> and{" "}
-        <a href="https://rustup.rs">Rust</a>. Rust is only used to build <code>ctx</code>;
-        nothing else needs it.
+        <strong>macOS and Linux</strong>
       </p>
       <pre>
         <code>
-          <span className="prompt">$ </span>cargo install --git
-          https://github.com/Percobain/RecurOS ctx-cli --locked{"\n"}
-          <span className="prompt">$ </span>ctx --version
+          <span className="prompt">$ </span>curl -fsSL https://recuros.vercel.app/install.sh | sh
         </code>
       </pre>
+      <p>
+        <strong>Windows</strong> (PowerShell)
+      </p>
+      <pre>
+        <code>
+          <span className="prompt">&gt; </span>irm https://recuros.vercel.app/install.ps1 | iex
+        </code>
+      </pre>
+      <p>
+        Or build it yourself, which is the only route that needs{" "}
+        <a href="https://rustup.rs">Rust</a>:{" "}
+        <code>cargo install --git https://github.com/Percobain/RecurOS ctx-cli --locked</code>
+      </p>
       <p className="note">
-        <strong>Prebuilt binaries</strong> and an <code>npx</code> installer land with the first
-        tagged release. See <Link href="/releases">Releases</Link>.
+        Every binary is built by GitHub Actions from the tag and published beside a{" "}
+        <code>SHA256SUMS</code> file. See <Link href="/releases">Releases</Link>.
       </p>
 
       <h2>Wire a project</h2>
